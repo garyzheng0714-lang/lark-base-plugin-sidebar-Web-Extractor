@@ -3,7 +3,7 @@
  * @Author     : itchaox
  * @Date       : 2023-09-26 15:10
  * @LastAuthor : Wang Chao
- * @LastTime   : 2025-02-25 21:34
+ * @LastTime   : 2025-02-25 21:37
  * @desc       : 主要页面
 -->
 <script setup>
@@ -147,6 +147,9 @@
         />
       </el-select>
     </div>
+
+    <div>当前选中单元格数据：</div>
+    <div></div>
   </div>
 </template>
 
