@@ -9,7 +9,7 @@
   },
   "output": "dist",
   "dependencies": {
-    "@lark-base-open/js-sdk": "https://lf3-static.bytednsdoc.com/obj/eden-cn/jjjpceh7nulojvhj/@lark-base-open-js-sdk-0.4.1-rc.7.tgz",
+    "@lark-base-open/js-sdk": "0.4.0",
     "@mapbox/node-pre-gyp": "^1.0.11",
     "element-plus": "^2.3.6",
     "node-opencc": "^2.0.1",
