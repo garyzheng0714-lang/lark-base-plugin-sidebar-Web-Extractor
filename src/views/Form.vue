@@ -3,12 +3,16 @@
  * @Author     : itchaox
  * @Date       : 2023-09-26 15:10
  * @LastAuthor : Wang Chao
- * @LastTime   : 2025-02-26 09:46
+ * @LastTime   : 2025-02-26 12:30
  * @desc       : 主要页面
 -->
 <script setup>
   import { onMounted, watch, ref, watchEffect } from 'vue';
   import { bitable } from '@lark-base-open/js-sdk';
+
+  // 国际化
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
 
   // 选择模式 cell 单元格; field 字段; database 数据表
   const selectModel = ref('cell');
@@ -99,12 +103,12 @@
 </script>
 
 <template>
-  <div class="s2t">
+  <div class="main">
     <div class="label">
-      <div class="text">数据表</div>
+      <div class="text">{{ $t('label.base') }}</div>
       <el-select
         v-model="databaseId"
-        placeholder="请选择数据表"
+        :placeholder="$t('placeholder.base')"
         @change="databaseChange"
         popper-class="selectStyle"
       >
@@ -118,10 +122,10 @@
     </div>
 
     <div class="label">
-      <div class="text">视图</div>
+      <div class="text">{{ $t('label.view') }}</div>
       <el-select
         v-model="viewId"
-        placeholder="请选择视图"
+        :placeholder="$t('placeholder.view')"
         popper-class="selectStyle"
       >
         <el-option
@@ -133,10 +137,10 @@
       </el-select>
     </div>
     <div class="label">
-      <div class="text">字段</div>
+      <div class="text">{{ $t('label.field') }}</div>
       <el-select
         v-model="fieldId"
-        placeholder="请选择字段"
+        :placeholder="$t('placeholder.field')"
         popper-class="selectStyle"
       >
         <el-option
@@ -148,14 +152,14 @@
       </el-select>
     </div>
 
-    <div>当前选中单元格数据：</div>
-    <div></div>
+    <div>{{ $t('label.current') }}</div>
+    <div class="show-data">展示区域数据</div>
   </div>
 </template>
 
 <style scoped>
-  .s2t {
-    font-weight: 300;
+  .main {
+    font-weight: normal;
   }
 
   .label {
@@ -188,6 +192,15 @@
     :deep(.el-input__inner) {
       font-weight: 300;
     }
+  }
+
+  .show-data {
+    margin-top: 20px;
+    width: 90%;
+    height: 50vh;
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 10px;
   }
 </style>
 

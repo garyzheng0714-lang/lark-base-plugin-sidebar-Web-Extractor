@@ -2,7 +2,8 @@
   "label": {
     "base": "数据表",
     "view": "视图",
-    "field": "字段"
+    "field": "字段",
+    "current": "当前选中单元格数据"
   },
   "placeholder": {
     "base": "请选择数据表",
