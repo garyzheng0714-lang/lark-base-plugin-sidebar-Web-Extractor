@@ -1,3 +1,12 @@
 {
-  "title":"标题"
+  "label": {
+    "base": "数据表",
+    "view": "视图",
+    "field": "字段"
+  },
+  "placeholder": {
+    "base": "请选择数据表",
+    "view": "请选择视图",
+    "field": "请选择字段"
+  }
 }

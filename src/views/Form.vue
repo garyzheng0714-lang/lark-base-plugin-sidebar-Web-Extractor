@@ -3,7 +3,7 @@
  * @Author     : itchaox
  * @Date       : 2023-09-26 15:10
  * @LastAuthor : Wang Chao
- * @LastTime   : 2025-02-25 21:37
+ * @LastTime   : 2025-02-26 09:46
  * @desc       : 主要页面
 -->
 <script setup>
@@ -101,7 +101,7 @@
 <template>
   <div class="s2t">
     <div class="label">
-      <div class="text">数据表:</div>
+      <div class="text">数据表</div>
       <el-select
         v-model="databaseId"
         placeholder="请选择数据表"
@@ -118,7 +118,7 @@
     </div>
 
     <div class="label">
-      <div class="text">视图:</div>
+      <div class="text">视图</div>
       <el-select
         v-model="viewId"
         placeholder="请选择视图"
@@ -133,7 +133,7 @@
       </el-select>
     </div>
     <div class="label">
-      <div class="text">字段:</div>
+      <div class="text">字段</div>
       <el-select
         v-model="fieldId"
         placeholder="请选择字段"
