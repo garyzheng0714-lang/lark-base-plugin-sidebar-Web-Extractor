@@ -3,11 +3,10 @@
  * @Author     : itchaox
  * @Date       : 2023-09-26 15:10
  * @LastAuthor : Wang Chao
- * @LastTime   : 2025-02-26 12:30
+ * @LastTime   : 2025-02-27 06:39
  * @desc       : 主要页面
 -->
 <script setup>
-  import { onMounted, watch, ref, watchEffect } from 'vue';
   import { bitable } from '@lark-base-open/js-sdk';
 
   // 国际化
