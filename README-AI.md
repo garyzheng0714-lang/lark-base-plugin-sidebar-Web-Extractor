@@ -13,10 +13,19 @@
 
 主要技术栈
 
-- Vue 3
+- Vue 3：使用<script setup>语法
 - Element-Plus
 - TypeScript
 - vue-i18n
+- Vite
+- HTML
+- CSS
+
+项目已集成：
+
+- unplugin-auto-import
+- unplugin-vue-components
+  用于 Vue 相关 API 的自动导入和组件注册
 
 参考文档
 
