@@ -4,13 +4,44 @@
 
 ### 🎯 项目介绍
 
-我正在开发一个飞书多维表格的侧边栏插件，该插件将通过 iframe 形式嵌入到多维表格界面中。现在提供的项目是该插件的 Demo，已在多维表格中正常展示。我的目标是让你熟悉该插件的整体开发结构。
+我正在开发一个飞书多维表格的侧边栏插件，该插件将通过 iframe 形式嵌入到多维表格界面中。现在提供的项目是插件的 Demo 项目代码模板，已在多维表格中正常展示。我的目标是让你熟悉该插件的整体开发结构。
 
 ### ✨ 项目特点
 
 - 📌 以 iframe 形式嵌入多维表格界面
 - ✅ 已完成基础环境搭建和展示功能
 - 🔧 可作为后续开发的基础模板
+
+### 📂 项目目录结构
+
+- 以下是项目目录结构，请仔细阅读理解，方便后续开发项目。
+
+```
+📁 lark-base-plugin-sidebar-template
+├── .gitignore               Git忽略文件配置
+├── LICENSE                  许可证文件
+├── README-AI.md             AI开发相关说明文档
+├── README.md                项目主要说明文档
+├── auto-imports.d.ts        自动导入API的类型声明文件
+├── components.d.ts          组件自动导入的类型声明文件
+├── env.d.ts                 环境变量类型声明文件
+├── index.html               项目HTML入口文件
+├── lark-help/               飞书插件API帮助文档
+│   ├── help-md/             多维表格 JS SDK 的API使用指南
+│   └── help-ts/             多维表格 JS SDK 的 TypeScript 类型定义文件
+├── package.json             项目配置和依赖管理
+├── public/                  静态资源文件夹
+├── src/                     源代码目录
+│   ├── App.vue              应用根组件
+│   ├── assets/              静态资源(图片、样式等)
+│   ├── locales/             国际化语言配置
+│   ├── main.js              应用入口文件
+│   └── views/               视图组件目录
+│       └── Form.vue         插件显示的主要页面
+├── tsconfig.json            TypeScript配置
+├── tsconfig.node.json       Node.js相关的TypeScript配置
+└── vite.config.js           Vite构建工具配置
+```
 
 ### 🛠️ 主要技术栈
 
