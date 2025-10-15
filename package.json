@@ -1,5 +1,5 @@
 {
-  "name": "Vue Template",
+  "name": "lark-base-plugin-sidebar-template",
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",

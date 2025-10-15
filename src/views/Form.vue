@@ -8,6 +8,7 @@
 -->
 <script setup>
   import { bitable } from '@lark-base-open/js-sdk';
+  import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
   import { fetchHtmlWithReader, fetchMarkdownWithReader, extractTitleFromHtml } from '../services/reader.js';
   import { extractAmazonStructured } from '../utils/extractors.js';
   // 回退：不再使用结构化提取器，恢复原样输出

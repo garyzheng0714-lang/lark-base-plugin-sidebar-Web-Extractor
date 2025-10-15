@@ -233,9 +233,35 @@ export function extractAmazonStructured(html, baseUrl) {
     const currentLink = doc.querySelector('#zg_browseRoot a[aria-current="true"]');
     activeCategory = normalizeText((currentLink?.textContent || '').trim());
   }
-  // 若拿到分类，则直接以分类名作为标题（保留页面语言）；避免统一中文短语导致语言失真
-  if (activeCategory) {
-    title = activeCategory;
+  // 组合完整标题：分类 + 语言对应的“売れ筋ランキング/销售排行榜/Best Sellers”
+  // 语言推断：优先域名与路径提示
+  let host = '';
+  let path = '';
+  try {
+    const u = new URL(baseUrl);
+    host = (u.hostname || '').toLowerCase();
+    path = u.pathname || '';
+  } catch (_) {}
+  const isJP = host.endsWith('.co.jp') || /\/\-\/ja/i.test(path);
+  const isZH = /\/\-\/zh/i.test(path);
+  const basePhrase = isJP ? '売れ筋ランキング' : (isZH ? '销售排行榜' : 'Best Sellers');
+  const ofWord = isJP ? 'の' : (isZH ? '的' : 'in');
+
+  // 当侧边分类缺失时，尝试从 <title> 中解析分类名
+  let categoryFromTitle = '';
+  const rawTitleTag = normalizeText((doc.querySelector('title')?.textContent || '').trim());
+  if (!activeCategory) {
+    const zh = rawTitleTag.match(/销售排行榜[:：]\s*(.+?)\s*中最受欢迎的商品/);
+    const ja = rawTitleTag.match(/売れ筋ランキング[:：]?\s*(.+)/);
+    const en = rawTitleTag.match(/Best Sellers in\s+(.+)/i);
+    const m = zh || ja || en;
+    if (m) categoryFromTitle = normalizeText((m[1] || '').trim());
+  }
+
+  const categoryName = normalizeText(activeCategory || categoryFromTitle || '');
+  if (categoryName) {
+    // JP/ZH："分类名 + の/的 + 卖得好"；EN："Best Sellers in 分类名"
+    title = isJP ? `${categoryName}${ofWord}${basePhrase}` : (isZH ? `${categoryName}${ofWord}${basePhrase}` : `${basePhrase} ${ofWord} ${categoryName}`);
   }
 
   // 侧边链接：稳定通过 zg_bs_nav_* ref 参数识别，且不在商品列表内
