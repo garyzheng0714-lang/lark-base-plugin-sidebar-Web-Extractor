@@ -9,6 +9,7 @@
 <script setup>
   import { bitable } from '@lark-base-open/js-sdk';
   import { fetchHtmlWithReader, fetchMarkdownWithReader, extractTitleFromHtml } from '../services/reader.js';
+  import { extractAmazonStructured } from '../utils/extractors.js';
   // 回退：不再使用结构化提取器，恢复原样输出
   import { log, error as logError, getLogs, clearLogs } from '../utils/logger.js';
 
@@ -80,6 +81,33 @@
   const running = ref(false);
   const progress = ref({ done: 0, total: 0 });
   const runError = ref('');
+  const paused = ref(false);
+  let abortCtrl = null;
+
+  // 输出语言选择：auto(按域名)、ja-JP、zh-CN、en-US
+  const outputLangMode = ref('auto');
+
+  function resolveAcceptLanguage(url) {
+    let host = '';
+    let path = '';
+    try { const u = new URL(url); host = u.hostname.toLowerCase(); path = u.pathname || ''; } catch (_) {}
+    const mode = outputLangMode.value;
+    const map = {
+      'ja-JP': 'ja-JP,ja;q=0.9,en;q=0.8',
+      'zh-CN': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'en-US': 'en-US,en;q=0.9'
+    };
+    if (mode && mode !== 'auto') return map[mode] || 'en-US,en;q=0.9';
+    // 路径显式本地化优先：/-/zh|en|ja/
+    if (/^\/-\/zh\//i.test(path)) return map['zh-CN'];
+    if (/^\/-\/en\//i.test(path)) return map['en-US'];
+    if (/^\/-\/ja\//i.test(path)) return map['ja-JP'];
+    if (host.endsWith('.co.jp') || /amazon\.co\.jp$/.test(host)) return map['ja-JP'];
+    if (host.endsWith('.cn')) return map['zh-CN'];
+    if (host.endsWith('.de')) return 'de-DE,de;q=0.9,en;q=0.6';
+    if (host.endsWith('.fr')) return 'fr-FR,fr;q=0.9,en;q=0.6';
+    return map['en-US'];
+  }
 
   // 简单 UA 随机池，降低被识别为脚本的概率
   const UA_POOL = [
@@ -108,11 +136,10 @@
       'x-wait-for-selector': waitSelector,
       'x-timeout-ms': isAmazon ? '8000' : '10000',
       'x-user-agent': isAmazon ? UA_POOL[0] : pickUA(),
-      // 提升可信度：附加语言与来源
-      ...(isAmazon ? {
-        'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8',
-        'referer': 'https://www.amazon.co.jp/'
-      } : {})
+      // 按域名/用户选择设置语言；Amazon 加Referer
+      'accept-language': resolveAcceptLanguage(url),
+      'x-accept-language': resolveAcceptLanguage(url),
+      ...(isAmazon ? { 'referer': 'https://www.amazon.co.jp/' } : {})
     };
     log('headers-built', { url, host, isAmazon, userAgent: headers['x-user-agent'] });
     return headers;
@@ -123,15 +150,10 @@
       const u = new URL(input);
       const host = (u.hostname || '').toLowerCase();
       if (!host.includes('amazon.')) return input;
-      // 去除语言与 ref 等追踪参数，降低重定向与门页概率
-      const parts = u.pathname.split('/');
-      const hasLocalization = parts.length > 3 && parts[1] === '-' && parts[2];
+      // 保留路径本地化；仅去除查询、哈希与 /ref= 追踪段
       // 清空查询与哈希
       u.search = '';
       u.hash = '';
-      if (hasLocalization) {
-        u.pathname = '/' + parts.slice(3).join('/');
-      }
       // 路径中可能存在 "/ref=..." 作为追踪段，直接截断到其之前
       const p = u.pathname || '';
       const refIdx = p.indexOf('/ref=');
@@ -150,24 +172,107 @@
     return /CAPTCHA/i.test(md) || /下のボタンをクリックしてショッピングを続けてください/.test(md);
   }
 
-  async function refetchIfDoor(url, headers, markdown) {
+  function isAmazonDoorHtml(html) {
+    if (!html) return false;
+    return /CAPTCHA/i.test(html) || /下のボタンをクリックしてショッピングを続けてください/.test(html) || /Continue shopping/i.test(html);
+  }
+
+  async function refetchAmazonHtmlIfDoor(url, headers, html, signal) {
+    if (!isAmazonDoorHtml(html)) {
+      const st = extractAmazonStructured(html, url);
+      return { html, structured: st, refetched: false };
+    }
+    log('record:door-detected-html', { url });
+    const altHeaders = { 'x-timeout-ms': '7000', 'x-user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0', 'accept-language': resolveAcceptLanguage(url), 'x-accept-language': resolveAcceptLanguage(url) };
+    try {
+      const h2 = await fetchHtmlWithReader(url, altHeaders, { signal });
+      if (isAmazonDoorHtml(h2)) {
+        const altHeaders3 = {
+          'x-timeout-ms': '7000',
+          'x-user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Mobile Safari/537.36',
+          'accept-language': resolveAcceptLanguage(url),
+          'x-accept-language': resolveAcceptLanguage(url),
+          'referer': 'https://www.amazon.co.jp/'
+        };
+        try {
+          const h3 = await fetchHtmlWithReader(url, altHeaders3, { signal });
+          if (isAmazonDoorHtml(h3)) {
+            const canonical = normalizeAmazonUrl(url);
+            if (canonical !== url) {
+              const altHeaders4 = {
+                'x-timeout-ms': '7000',
+                'x-user-agent': UA_POOL[0],
+                'accept-language': resolveAcceptLanguage(canonical),
+                'x-accept-language': resolveAcceptLanguage(canonical),
+                'referer': 'https://www.amazon.co.jp/',
+                'x-wait-for-selector': '#zg-ordered-list'
+              };
+              try {
+                const h4 = await fetchHtmlWithReader(canonical, altHeaders4, { signal });
+                const st4 = extractAmazonStructured(h4, canonical);
+                if (!isAmazonDoorHtml(h4)) {
+                  log('record:door-canonical-refetch-success-html', { url: canonical, htmlLength: (h4 || '').length });
+                  return { html: h4, structured: st4, refetched: true };
+                }
+                log('record:door-canonical-still-door-html', { url: canonical, htmlLength: (h4 || '').length });
+              } catch (e4) {
+                logError('record:door-canonical-refetch-fail-html', e4, { url: canonical });
+              }
+            }
+            const st3 = extractAmazonStructured(h3, url);
+            log('record:door-refetch-3-still-door-html', { url, htmlLength: (h3 || '').length });
+            return { html: h3, structured: st3, refetched: true };
+          } else {
+            const st3 = extractAmazonStructured(h3, url);
+            log('record:door-refetch-3-success-html', { url, htmlLength: (h3 || '').length });
+            return { html: h3, structured: st3, refetched: true };
+          }
+        } catch (e3) {
+          // 若为用户中止，向上抛出以停止写入
+          if (signal?.aborted || (e3 && (e3.name === 'AbortError' || /aborted/i.test(e3.message || '')))) {
+            log('reader:aborted', { url, attempt: 3 });
+            throw e3;
+          }
+          logError('record:door-refetch-3-fail-html', e3, { url });
+          const st2 = extractAmazonStructured(h2, url);
+          log('record:door-refetch-success-html', { url, htmlLength: (h2 || '').length });
+          return { html: h2, structured: st2, refetched: true };
+        }
+      } else {
+        const st2 = extractAmazonStructured(h2, url);
+        log('record:door-refetch-success-html', { url, htmlLength: (h2 || '').length });
+        return { html: h2, structured: st2, refetched: true };
+      }
+    } catch (e) {
+      if (signal?.aborted || (e && (e.name === 'AbortError' || /aborted/i.test(e.message || '')))) {
+        log('reader:aborted', { url, attempt: 1 });
+        throw e;
+      }
+      logError('record:door-refetch-fail-html', e, { url });
+      const st0 = extractAmazonStructured(html, url);
+      return { html, structured: st0, refetched: false };
+    }
+  }
+
+  async function refetchIfDoor(url, headers, markdown, signal) {
     const isDoor = isAmazonDoorMarkdown(markdown);
     if (!isDoor) return { markdown, title: extractTitleFromMarkdown(markdown), refetched: false };
     log('record:door-detected', { url });
     // 二次尝试：更换 UA，移除等待选择器，加快与避开门页
-    const altHeaders = { 'x-timeout-ms': '7000', 'x-user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0' };
+    const altHeaders = { 'x-timeout-ms': '7000', 'x-user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0', 'accept-language': resolveAcceptLanguage(url), 'x-accept-language': resolveAcceptLanguage(url) };
     try {
-      const md2 = await fetchMarkdownWithReader(url, altHeaders);
+      const md2 = await fetchMarkdownWithReader(url, altHeaders, { signal });
       // 若仍为门页，再做第三次回退：使用 Android Chrome UA + 英文语言，尝试移动页面分支
       if (isAmazonDoorMarkdown(md2)) {
         const altHeaders3 = {
           'x-timeout-ms': '7000',
           'x-user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Mobile Safari/537.36',
-          'accept-language': 'en-US,en;q=0.9',
+          'accept-language': resolveAcceptLanguage(url),
+          'x-accept-language': resolveAcceptLanguage(url),
           'referer': 'https://www.amazon.co.jp/'
         };
         try {
-          const md3 = await fetchMarkdownWithReader(url, altHeaders3);
+          const md3 = await fetchMarkdownWithReader(url, altHeaders3, { signal });
           if (isAmazonDoorMarkdown(md3)) {
             // 仍为门页：尝试使用规范化后的 Canonical 链接做最终回退
             const canonical = normalizeAmazonUrl(url);
@@ -175,12 +280,13 @@
               const altHeaders4 = {
                 'x-timeout-ms': '7000',
                 'x-user-agent': UA_POOL[0],
-                'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8',
+                'accept-language': resolveAcceptLanguage(canonical),
+                'x-accept-language': resolveAcceptLanguage(canonical),
                 'referer': 'https://www.amazon.co.jp/',
                 'x-wait-for-selector': '#zg-ordered-list'
               };
               try {
-                const md4 = await fetchMarkdownWithReader(canonical, altHeaders4);
+                const md4 = await fetchMarkdownWithReader(canonical, altHeaders4, { signal });
                 if (!isAmazonDoorMarkdown(md4)) {
                   const title4 = extractTitleFromMarkdown(md4);
                   log('record:door-canonical-refetch-success', { url: canonical, markdownLength: (md4 || '').length });
@@ -201,6 +307,10 @@
             return { markdown: md3, title: title3, refetched: true };
           }
         } catch (e3) {
+          if (signal?.aborted || (e3 && (e3.name === 'AbortError' || /aborted/i.test(e3.message || '')))) {
+            log('reader:aborted', { url, attempt: 3 });
+            throw e3;
+          }
           logError('record:door-refetch-3-fail', e3, { url });
           const title2 = extractTitleFromMarkdown(md2);
           log('record:door-refetch-success', { url, markdownLength: (md2 || '').length });
@@ -212,10 +322,41 @@
         return { markdown: md2, title: title2, refetched: true };
       }
     } catch (e) {
+      if (signal?.aborted || (e && (e.name === 'AbortError' || /aborted/i.test(e.message || '')))) {
+        log('reader:aborted', { url, attempt: 1 });
+        throw e;
+      }
       logError('record:door-refetch-fail', e, { url });
       return { markdown, title: extractTitleFromMarkdown(markdown), refetched: false };
     }
   }
+
+  // 运行日志面板：实时显示内存日志
+  const runtimeLogs = ref([]);
+  const logViewRef = ref();
+  const logAutoScroll = ref(true);
+  let logTimer = null;
+  const formattedRuntimeText = computed(() => {
+    const tail = (runtimeLogs.value || []).slice(-300);
+    return tail.map((l) => {
+      const level = String(l.level || 'info').toUpperCase();
+      let dataStr = '';
+      try { dataStr = JSON.stringify(l.data || {}); } catch (_) { dataStr = ''; }
+      return `[${l.ts}] ${level} ${l.event} ${dataStr}`;
+    }).join('\n');
+  });
+  function startLogStreaming() {
+    if (logTimer) return;
+    logTimer = setInterval(() => { runtimeLogs.value = getLogs(); }, 500);
+  }
+  function stopLogStreaming() { if (logTimer) { clearInterval(logTimer); logTimer = null; } }
+  onMounted(() => { startLogStreaming(); });
+  onUnmounted(() => { stopLogStreaming(); });
+  watch(runtimeLogs, () => {
+    if (!logAutoScroll.value) return;
+    const el = logViewRef.value;
+    if (el) { el.scrollTop = el.scrollHeight; }
+  });
 
   // Fisher-Yates shuffle，避免固定顺序导致同域短时间内集中请求
   function shuffleInPlace(arr) {
@@ -244,6 +385,8 @@
   }
 
   async function autoDetectUrlField() {
+    // 批量运行中跳过自动检测，避免写入触发视图事件导致重复开销
+    if (running.value) return;
     urlFieldId.value = '';
     try {
       log('auto-detect-url-field:start', { tableId: databaseId.value, viewId: viewId.value });
@@ -318,6 +461,8 @@
       return;
     }
     running.value = true;
+    paused.value = false;
+    abortCtrl = new AbortController();
     progress.value = { done: 0, total: 0 };
     try {
       const table = await base.getTable(databaseId.value);
@@ -350,12 +495,15 @@
         } catch (_) {}
       }
       const hasAmazon = amazonCount > 0;
-      const concurrency = hasAmazon ? 1 : 2;
+      const concurrency = hasAmazon ? 1 : 4;
       let idx = 0;
       const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       const field = await table.getFieldById(outputFieldId.value);
+      // 结果缓存：同一规范化 URL 多次出现时复用结果，提升速度并降低触发限速
+      const contentCache = new Map(); // url -> { content, title, markdownLength }
       async function worker() {
         while (idx < recordIds.length) {
+          if (paused.value || (abortCtrl && abortCtrl.signal?.aborted)) { log('worker:aborted:start'); break; }
           const current = idx++;
           const rid = recordIds[current];
           try {
@@ -363,21 +511,67 @@
             const url = extractFirstUrl(val);
             if (!url) { log('record:skip-no-url', { recordId: rid }); progress.value.done++; continue; }
             const normalizedUrl = normalizeAmazonUrl(url);
+            // 复用缓存结果
+            if (contentCache.has(normalizedUrl)) {
+              const cached = contentCache.get(normalizedUrl);
+              try {
+                await field.setValue(rid, cached.content);
+                log('cache:hit-write-success', { recordId: rid, url: normalizedUrl, contentLength: cached.content.length });
+              } catch (writeErr) {
+                logError('cache:hit-write-error', writeErr, { recordId: rid, fieldId: outputFieldId.value });
+              }
+              const baseMinC = hasAmazon ? 900 : 200;
+              const baseSpanC = hasAmazon ? 500 : 250;
+              await delay(baseMinC + Math.floor(Math.random() * baseSpanC));
+              progress.value.done++;
+              continue;
+            }
             const headers = buildHeadersForUrl(normalizedUrl);
             // 域名级最小间隔，降低触发限速与门页
             await ensureDomainInterval(normalizedUrl);
-            const markdown0 = await fetchMarkdownWithReader(normalizedUrl, headers);
-            const { markdown, title, refetched } = await refetchIfDoor(normalizedUrl, headers, markdown0);
-            log('record:fetch-success', {
-              recordId: rid,
-              url: normalizedUrl,
-              title: title || '',
-              markdownLength: (markdown || '').length
-            });
-            const content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${markdown || ''}`;
+            if (paused.value || (abortCtrl && abortCtrl.signal?.aborted)) { log('worker:aborted:before-fetch'); break; }
+            // 根据域名选择提取路径：Amazon 走 HTML + 本地解析，其他走 Reader Markdown
+            let content = '';
+            let title = '';
+            if (/amazon\./i.test((new URL(normalizedUrl)).hostname)) {
+              const html0 = await fetchHtmlWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
+              const { html, structured } = await refetchAmazonHtmlIfDoor(normalizedUrl, headers, html0, abortCtrl.signal);
+              title = (structured?.title || '').trim();
+              const md = formatStructuredForAmazon(structured, normalizedUrl);
+              log('record:fetch-success-html', {
+                recordId: rid,
+                url: normalizedUrl,
+                title: title || '',
+                items: Array.isArray(structured?.items) ? structured.items.length : 0,
+                sidebar: Array.isArray(structured?.sidebar) ? structured.sidebar.length : 0,
+                htmlLength: (html || '').length
+              });
+              // 记录结构化解析结果与生成的 Markdown
+              log('record:parsed-structured', { recordId: rid, url: normalizedUrl, title: title || '', structured });
+              log('record:parsed-markdown', { recordId: rid, url: normalizedUrl, title: title || '', markdown: md || '' });
+              content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${md || ''}`;
+            } else {
+              const markdown0 = await fetchMarkdownWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
+              const result = await refetchIfDoor(normalizedUrl, headers, markdown0, abortCtrl.signal);
+              const markdown = result.markdown;
+              title = result.title;
+              log('record:fetch-success', {
+                recordId: rid,
+                url: normalizedUrl,
+                title: title || '',
+                markdownLength: (markdown || '').length
+              });
+              // 记录 Markdown 解析内容
+              log('record:parsed-markdown', { recordId: rid, url: normalizedUrl, title: title || '', markdown: markdown || '' });
+              content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${markdown || ''}`;
+            }
+            // 写入前记录预览内容
+            log('record:write-preview', { recordId: rid, url: normalizedUrl, content, contentLength: (content || '').length });
             try {
               await field.setValue(rid, content);
-              log('record:write-success', { recordId: rid, contentLength: content.length });
+              log('record:write-success', { recordId: rid, contentLength: content.length, content });
+              // 写入成功后，缓存结果供后续同 URL 复用
+              contentCache.set(normalizedUrl, { content, title, markdownLength: content.length });
             } catch (writeErr) {
               logError('record:write-error', writeErr, { recordId: rid, fieldId: outputFieldId.value });
             }
@@ -386,6 +580,10 @@
             await delay(baseMin + Math.floor(Math.random() * baseSpan));
           } catch (e) {
             // 单条失败跳过，继续下一个
+            if (abortCtrl && abortCtrl.signal?.aborted) {
+              log('record:aborted', { recordId: rid });
+              break;
+            }
             logError('record:fetch-error', e, { recordId: rid });
           } finally {
             progress.value.done++;
@@ -398,6 +596,8 @@
       logError('batch:error', e);
     } finally {
       running.value = false;
+      paused.value = false;
+      abortCtrl = null;
       log('batch:end', { done: progress.value.done, total: progress.value.total });
     }
   }
@@ -475,15 +675,33 @@
     try {
       const normalizedUrl = normalizeAmazonUrl(url);
       const headers = buildHeadersForUrl(normalizedUrl);
-      const markdown0 = await fetchMarkdownWithReader(normalizedUrl, headers);
-      const { markdown, title } = await refetchIfDoor(normalizedUrl, headers, markdown0);
-      pageTitle.value = title || '';
-      log('single:fetch-success', {
-        url: normalizedUrl,
-        title: title || '',
-        markdownLength: (markdown || '').length
-      });
-      products.value = []; // 页面仅预览标题，批量写入结构化文本
+      if (/amazon\./i.test((new URL(normalizedUrl)).hostname)) {
+        const html0 = await fetchHtmlWithReader(normalizedUrl, headers);
+        const { html, structured } = await refetchAmazonHtmlIfDoor(normalizedUrl, headers, html0);
+        pageTitle.value = (structured?.title || '') || '';
+        log('single:fetch-success-html', {
+          url: normalizedUrl,
+          title: pageTitle.value || '',
+          items: Array.isArray(structured?.items) ? structured.items.length : 0,
+          htmlLength: (html || '').length
+        });
+        // 记录结构化解析结果与生成的 Markdown 预览
+        const md = formatStructuredForAmazon(structured, normalizedUrl);
+        log('single:parsed-structured', { url: normalizedUrl, title: pageTitle.value || '', structured });
+        log('single:parsed-markdown', { url: normalizedUrl, title: pageTitle.value || '', markdown: md || '' });
+        products.value = [];
+      } else {
+        const markdown0 = await fetchMarkdownWithReader(normalizedUrl, headers);
+        const { markdown, title } = await refetchIfDoor(normalizedUrl, headers, markdown0);
+        pageTitle.value = title || '';
+        log('single:fetch-success', {
+          url: normalizedUrl,
+          title: title || '',
+          markdownLength: (markdown || '').length
+        });
+        log('single:parsed-markdown', { url: normalizedUrl, title: title || '', markdown: markdown || '' });
+        products.value = [];
+      }
     } catch (e) {
       extractError.value = (e && e.message) ? e.message : t('msg.fetchError');
       logError('single:fetch-error', e, { url });
@@ -536,17 +754,31 @@
       logError('logs:export-error', e);
     }
   }
+
+  function pauseRun() {
+    try {
+      if (!running.value) return;
+      paused.value = true;
+      if (abortCtrl) {
+        try { abortCtrl.abort(); } catch (_) {}
+      }
+      running.value = false;
+      log('batch:paused', { done: progress.value.done, total: progress.value.total });
+    } catch (e) {
+      logError('batch:pause-error', e);
+    }
+  }
 </script>
 
 <template>
   <div class="main">
-    <div class="section">
-      <div class="text">{{ $t('label.linkField') }}</div>
-      <el-select
-        v-model="urlFieldId"
-        :placeholder="$t('placeholder.linkField')"
-        popper-class="selectStyle"
-      >
+  <div class="section">
+    <div class="text">{{ $t('label.linkField') }}</div>
+    <el-select
+      v-model="urlFieldId"
+      :placeholder="$t('placeholder.linkField')"
+      popper-class="selectStyle"
+    >
         <el-option
           v-for="item in fieldList"
           :key="item.id"
@@ -569,15 +801,36 @@
           :value="item.id"
         />
       </el-select>
+
+      <div class="text">输出语言</div>
+      <el-select v-model="outputLangMode" :placeholder="'自动按域名'" popper-class="selectStyle">
+        <el-option label="自动按域名" value="auto" />
+        <el-option label="日语（ja-JP）" value="ja-JP" />
+        <el-option label="中文（zh-CN）" value="zh-CN" />
+        <el-option label="英语（en-US）" value="en-US" />
+      </el-select>
       
       <div class="run-row">
         <el-button type="primary" :loading="running" @click="runBatchUpdate">
           {{ $t('btn.run') }}
         </el-button>
-        <el-button @click="exportLogs">导出日志</el-button>
+        <el-button type="warning" v-if="running" @click="pauseRun">暂停</el-button>
         <div v-if="running" class="progress">{{ progress.done }} / {{ progress.total }}</div>
       </div>
       <div v-if="runError" class="error">{{ runError }}</div>
+    </div>
+    <!-- 运行日志面板 -->
+    <div class="runtime-panel">
+      <div class="runtime-header">
+        <div>运行日志</div>
+        <div class="runtime-actions">
+          <el-switch v-model="logAutoScroll" active-text="自动滚动" />
+          <el-button @click="exportLogs">导出日志</el-button>
+        </div>
+      </div>
+      <div class="runtime-body" ref="logViewRef">
+        <pre class="runtime-pre">{{ formattedRuntimeText }}</pre>
+      </div>
     </div>
   </div>
 </template>
@@ -653,6 +906,37 @@
     color: #6b7280;
   }
   .hint.small { font-size: 12px; }
+
+  .runtime-panel {
+    margin-top: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fafafa;
+  }
+  .runtime-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 13px;
+    color: #374151;
+  }
+  .runtime-actions { display: flex; gap: 8px; align-items: center; }
+  .runtime-body {
+    max-height: 220px;
+    overflow: auto;
+    padding: 8px 10px;
+    background: #ffffff;
+  }
+  .runtime-pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
 </style>
 
 <style>

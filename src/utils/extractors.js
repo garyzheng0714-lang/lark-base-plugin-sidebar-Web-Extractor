@@ -222,7 +222,7 @@ export function extractAmazonStructured(html, baseUrl) {
     }
   };
 
-  // 标题：优先 h1/zg_banner_text，并尝试从左侧当前分类补全明确分类名，避免不同页面标题雷同
+  // 标题：优先 h1/zg_banner_text，再尝试从左侧当前分类补全明确分类名；保留站点原始语言
   let title = normalizeText((doc.querySelector('#zg_banner_text')?.textContent || doc.querySelector('h1')?.textContent || '').trim());
   if (!title) {
     title = normalizeText((doc.querySelector('title')?.textContent || '').trim());
@@ -233,9 +233,9 @@ export function extractAmazonStructured(html, baseUrl) {
     const currentLink = doc.querySelector('#zg_browseRoot a[aria-current="true"]');
     activeCategory = normalizeText((currentLink?.textContent || '').trim());
   }
-  // 如果拿到分类，则将标题规范为中文说明，便于后续格式化解析
+  // 若拿到分类，则直接以分类名作为标题（保留页面语言）；避免统一中文短语导致语言失真
   if (activeCategory) {
-    title = `销售排行榜: ${activeCategory} 中最受欢迎的商品`;
+    title = activeCategory;
   }
 
   // 侧边链接：稳定通过 zg_bs_nav_* ref 参数识别，且不在商品列表内
@@ -260,7 +260,7 @@ export function extractAmazonStructured(html, baseUrl) {
 
   // 商品列表：优先有序列表 <ol id="zg-ordered-list"> 的 <li>
   const items = [];
-  let cards = Array.from(doc.querySelectorAll('ol#zg-ordered-list > li'));
+  let cards = Array.from(doc.querySelectorAll('ol#zg-ordered-list > li, #zg-ordered-list li'));
   if (cards.length === 0) {
     // 回退：更广泛的 li，但仍以是否存在商品 anchor 为准
     cards = Array.from(doc.querySelectorAll('li'));
@@ -326,8 +326,8 @@ export function extractAmazonStructured(html, baseUrl) {
 
   // 如果未提取到商品，则尝试锚点回退（不在商品列表内）
   if (items.length === 0) {
-    const anchors = Array.from(doc.querySelectorAll('a[href*="/dp/"], a[href*="/gp/product/"]'))
-      .filter((a) => !a.closest('ol#zg-ordered-list'));
+    // 回退：扫描全局 anchors，包括列表内，尽量拿到商品名称
+    const anchors = Array.from(doc.querySelectorAll('a[href*="/dp/"], a[href*="/gp/product/"]'));
     for (const a of anchors) {
       let name = normalizeText((a.textContent || '').trim());
       if (!name || name.length < 2) continue;
