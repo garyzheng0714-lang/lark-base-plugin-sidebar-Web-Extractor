@@ -98,14 +98,15 @@
       'en-US': 'en-US,en;q=0.9'
     };
     if (mode && mode !== 'auto') return map[mode] || 'en-US,en;q=0.9';
-    // 路径显式本地化优先：/-/zh|en|ja/
-    if (/^\/-\/zh\//i.test(path)) return map['zh-CN'];
-    if (/^\/-\/en\//i.test(path)) return map['en-US'];
-    if (/^\/-\/ja\//i.test(path)) return map['ja-JP'];
+    // 域优先：先按域名强制语言，其次再看路径显式本地化
     if (host.endsWith('.co.jp') || /amazon\.co\.jp$/.test(host)) return map['ja-JP'];
     if (host.endsWith('.cn')) return map['zh-CN'];
     if (host.endsWith('.de')) return 'de-DE,de;q=0.9,en;q=0.6';
     if (host.endsWith('.fr')) return 'fr-FR,fr;q=0.9,en;q=0.6';
+    // 路径显式本地化：/-/zh|en|ja/
+    if (/^\/-\/zh\//i.test(path)) return map['zh-CN'];
+    if (/^\/-\/en\//i.test(path)) return map['en-US'];
+    if (/^\/-\/ja\//i.test(path)) return map['ja-JP'];
     return map['en-US'];
   }
 
@@ -131,7 +132,7 @@
     try { host = new URL(url).hostname.toLowerCase(); } catch (_) {}
     const isAmazon = /amazon\./i.test(host);
     // 亚马逊：只等待榜单列表，缩短超时；其他站点略等页面主体
-    const waitSelector = isAmazon ? '#zg-ordered-list' : 'h1, article, main';
+    const waitSelector = isAmazon ? 'ol#zg-ordered-list > li, #zg-ordered-list li, .zg-grid-general-faceout, div[class*="grid-cell"], div[data-testid="grid-cell"]' : 'h1, article, main';
     const headers = {
       'x-wait-for-selector': waitSelector,
       'x-timeout-ms': isAmazon ? '8000' : '10000',
@@ -141,7 +142,7 @@
       'x-accept-language': resolveAcceptLanguage(url),
       ...(isAmazon ? { 'referer': 'https://www.amazon.co.jp/' } : {})
     };
-    log('headers-built', { url, host, isAmazon, userAgent: headers['x-user-agent'] });
+    log('headers-built', { url, host, isAmazon, userAgent: headers['x-user-agent'], acceptLanguage: headers['accept-language'], waitSelector });
     return headers;
   }
 
@@ -150,17 +151,44 @@
       const u = new URL(input);
       const host = (u.hostname || '').toLowerCase();
       if (!host.includes('amazon.')) return input;
-      // 保留路径本地化；仅去除查询、哈希与 /ref= 追踪段
+      // 域优先语言：移除 Amazon 翻译路径前缀 /-/zh|en|ja/，并去除查询、哈希与 /ref= 追踪段
       // 清空查询与哈希
       u.search = '';
       u.hash = '';
       // 路径中可能存在 "/ref=..." 作为追踪段，直接截断到其之前
-      const p = u.pathname || '';
+      let p = u.pathname || '';
+      const before = p;
+      // 更通用的语言前缀移除：/-/zh、/-/zh-CN、/-/en-US、/-/ja-JP 等
+      p = p.replace(/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i, '/');
       const refIdx = p.indexOf('/ref=');
       if (refIdx !== -1) {
         u.pathname = p.slice(0, refIdx);
+      } else {
+        u.pathname = p;
+      }
+      if (before !== u.pathname) {
+        log('language:path-localization-removed', { host, pathBefore: before, pathAfter: u.pathname });
       }
       // 规范输出为 origin + pathname，避免意外带回查询参数
+      return `${u.origin}${u.pathname}`;
+    } catch (_) {
+      return input;
+    }
+  }
+
+  // 强制为 Amazon 添加语言路径前缀（如 '/-/ja/'），用于语言失配时的二次抓取
+  function forceAmazonLangPath(input, langCode = 'ja') {
+    try {
+      const u = new URL(input);
+      const host = (u.hostname || '').toLowerCase();
+      if (!host.includes('amazon.')) return input;
+      let p = u.pathname || '';
+      if (/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i.test(p)) {
+        p = p.replace(/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i, `/-/${langCode}/`);
+      } else {
+        p = `/-/${langCode}${p.startsWith('/') ? '' : '/'}${p}`;
+      }
+      u.pathname = p;
       return `${u.origin}${u.pathname}`;
     } catch (_) {
       return input;
@@ -537,7 +565,7 @@
               const html0 = await fetchHtmlWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
               const { html, structured } = await refetchAmazonHtmlIfDoor(normalizedUrl, headers, html0, abortCtrl.signal);
               title = (structured?.title || '').trim();
-              const md = formatStructuredForAmazon(structured, normalizedUrl);
+              let mdFinal = formatStructuredForAmazon(structured, normalizedUrl);
               log('record:fetch-success-html', {
                 recordId: rid,
                 url: normalizedUrl,
@@ -548,8 +576,54 @@
               });
               // 记录结构化解析结果与生成的 Markdown
               log('record:parsed-structured', { recordId: rid, url: normalizedUrl, title: title || '', structured });
-              log('record:parsed-markdown', { recordId: rid, url: normalizedUrl, title: title || '', markdown: md || '' });
-              content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${md || ''}`;
+              log('record:parsed-markdown', { recordId: rid, url: normalizedUrl, title: title || '', markdown: mdFinal || '' });
+              // 若语言失配（仍为英文），且域为 .co.jp，则尝试强制 '/-/ja/' 路径做二次抓取
+              const host = (new URL(normalizedUrl)).hostname.toLowerCase();
+              const looksEnglish = (/best sellers/i.test(title) || (Array.isArray(structured?.sidebar) && structured.sidebar.some(s => /\/-\/en\//i.test(s.url))));
+              if (host.endsWith('.co.jp') && looksEnglish) {
+                try {
+                  const urlJa = forceAmazonLangPath(normalizedUrl, 'ja');
+                  const headersJa = buildHeadersForUrl(urlJa);
+                  const htmlJa0 = await fetchHtmlWithReader(urlJa, headersJa, { signal: abortCtrl.signal });
+                  const { html: htmlJa, structured: stJa } = await refetchAmazonHtmlIfDoor(urlJa, headersJa, htmlJa0, abortCtrl.signal);
+                  const titleJa = (stJa?.title || '').trim();
+                  const mdJa = formatStructuredForAmazon(stJa, urlJa);
+                  log('language:refetch-path-ja', {
+                    recordId: rid,
+                    url: urlJa,
+                    titleBefore: title || '',
+                    titleAfter: titleJa || '',
+                    itemsBefore: Array.isArray(structured?.items) ? structured.items.length : 0,
+                    itemsAfter: Array.isArray(stJa?.items) ? stJa.items.length : 0
+                  });
+                  title = titleJa || title;
+                  mdFinal = mdJa || mdFinal;
+                  log('record:parsed-markdown', { recordId: rid, url: urlJa, title: title || '', markdown: mdFinal || '' });
+                  // 覆盖 structured.items 以便统计
+                  if (Array.isArray(stJa?.items)) structured.items = stJa.items;
+                } catch (langErr) {
+                  logError('language:refetch-path-ja-error', langErr, { recordId: rid, url: normalizedUrl });
+                }
+              }
+              // 若结构化解析失败或商品为空，使用 Reader Markdown 保底回退（域优先语言）
+              let usedFallback = false;
+              if (!title || !Array.isArray(structured?.items) || structured.items.length === 0) {
+                try {
+                  const markdownFallback0 = await fetchMarkdownWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
+                  const { markdown: markdownFallback, title: titleFallback } = await refetchIfDoor(normalizedUrl, headers, markdownFallback0, abortCtrl.signal);
+                  log('record:fallback-reader-markdown', { recordId: rid, url: normalizedUrl, markdownLength: (markdownFallback || '').length });
+                  log('record:parsed-markdown-fallback', { recordId: rid, url: normalizedUrl, title: titleFallback || title || '', markdown: markdownFallback || '' });
+                  title = (titleFallback || title || '').trim();
+                  const md2 = markdownFallback || mdFinal || '';
+                  content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${md2 || ''}`;
+                  usedFallback = true;
+                } catch (fbErr) {
+                  logError('record:fallback-reader-markdown-error', fbErr, { recordId: rid, url: normalizedUrl });
+                }
+              }
+              if (!usedFallback) {
+                content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${mdFinal || ''}`;
+              }
             } else {
               const markdown0 = await fetchMarkdownWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
               const result = await refetchIfDoor(normalizedUrl, headers, markdown0, abortCtrl.signal);
@@ -602,16 +676,45 @@
     }
   }
 
-  // 格式化 Amazon 结构化文本，稳定过滤页面噪音
+  // 格式化 Amazon 结构化文本，稳定过滤页面噪音（按域语言输出）
   function formatStructuredForAmazon(structured, sourceUrl) {
     const title = (structured?.title || '').trim();
     const side = Array.isArray(structured?.sidebar) ? structured.sidebar : [];
     const items = Array.isArray(structured?.items) ? structured.items : [];
 
+    // 语言字符串映射（可扩展）
+    const langHeader = resolveAcceptLanguage(sourceUrl);
+    const primaryLang = (langHeader.split(',')[0] || 'en-US').trim();
+    const STR = {
+      'ja-JP': {
+        headingBase: '売れ筋ランキング',
+        of: 'の',
+        price: '価格',
+        from: 'より',
+      },
+      'zh-CN': {
+        headingBase: '销售排行榜',
+        of: '的',
+        price: '价格',
+        from: '起',
+      },
+      'en-US': {
+        headingBase: 'Best Sellers',
+        of: 'in',
+        price: 'Price',
+        from: 'from',
+      },
+    };
+    const S = STR[primaryLang] || STR['en-US'];
+
     // 从标题中尝试解析分类名，如 "销售排行榜: 食品 中最受欢迎的商品"
     const categoryFromTitle = (() => {
-      const m = title.match(/销售排行榜[:：]\s*(.+?)\s*中最受欢迎的商品/);
-      return m ? m[1].trim() : '';
+      // 尝试从标题中解析分类（中文/日文/英文常见形式）
+      const zh = title.match(/销售排行榜[:：]\s*(.+?)\s*中最受欢迎的商品/);
+      const ja = title.match(/売れ筋ランキング[:：]?\s*(.+)/);
+      const en = title.match(/Best Sellers in\s+(.+)/i);
+      const m = zh || ja || en;
+      return m ? (m[1] || '').trim() : '';
     })();
 
     const lines = [];
@@ -631,7 +734,7 @@
     }
 
     lines.push('');
-    const heading = categoryFromTitle ? `${categoryFromTitle}的 销售排行榜` : '销售排行榜';
+    const heading = categoryFromTitle ? `${categoryFromTitle}${S.of} ${S.headingBase}` : S.headingBase;
     lines.push(heading);
     lines.push('=========');
 
@@ -653,7 +756,7 @@
           parts.push(`[${inner}](${reviewsUrl})`);
         }
         if (priceText) {
-          parts.push(`[价格 ${priceText} 起](${url})`);
+          parts.push(`[${S.price} ${priceText} ${S.from}](${url})`);
         }
         lines.push(parts.join(' '));
       }
@@ -686,9 +789,48 @@
           htmlLength: (html || '').length
         });
         // 记录结构化解析结果与生成的 Markdown 预览
-        const md = formatStructuredForAmazon(structured, normalizedUrl);
+        let mdFinal = formatStructuredForAmazon(structured, normalizedUrl);
         log('single:parsed-structured', { url: normalizedUrl, title: pageTitle.value || '', structured });
-        log('single:parsed-markdown', { url: normalizedUrl, title: pageTitle.value || '', markdown: md || '' });
+        log('single:parsed-markdown', { url: normalizedUrl, title: pageTitle.value || '', markdown: mdFinal || '' });
+        // 若语言失配（仍为英文），且域为 .co.jp，则尝试强制 '/-/ja/' 路径做二次抓取
+        const host = (new URL(normalizedUrl)).hostname.toLowerCase();
+        const looksEnglish = (/best sellers/i.test(pageTitle.value || '') || (Array.isArray(structured?.sidebar) && structured.sidebar.some(s => /\/-\/en\//i.test(s.url))));
+        if (host.endsWith('.co.jp') && looksEnglish) {
+          try {
+            const urlJa = forceAmazonLangPath(normalizedUrl, 'ja');
+            const headersJa = buildHeadersForUrl(urlJa);
+            const htmlJa0 = await fetchHtmlWithReader(urlJa, headersJa);
+            const { html: htmlJa, structured: stJa } = await refetchAmazonHtmlIfDoor(urlJa, headersJa, htmlJa0);
+            const titleJa = (stJa?.title || '').trim();
+            const mdJa = formatStructuredForAmazon(stJa, urlJa);
+            log('language:refetch-path-ja', {
+              url: urlJa,
+              titleBefore: pageTitle.value || '',
+              titleAfter: titleJa || '',
+              itemsBefore: Array.isArray(structured?.items) ? structured.items.length : 0,
+              itemsAfter: Array.isArray(stJa?.items) ? stJa.items.length : 0
+            });
+            pageTitle.value = titleJa || pageTitle.value || '';
+            mdFinal = mdJa || mdFinal;
+            log('single:parsed-markdown', { url: urlJa, title: pageTitle.value || '', markdown: mdFinal || '' });
+            if (Array.isArray(stJa?.items)) structured.items = stJa.items;
+          } catch (langErr) {
+            logError('single:refetch-path-ja-error', langErr, { url: normalizedUrl });
+          }
+        }
+        // 若结构化解析失败或商品为空，使用 Reader Markdown 保底回退（域优先语言）
+        if (!pageTitle.value || !Array.isArray(structured?.items) || structured.items.length === 0) {
+          try {
+            const markdownFallback0 = await fetchMarkdownWithReader(normalizedUrl, headers);
+            const { markdown: markdownFallback, title: titleFallback } = await refetchIfDoor(normalizedUrl, headers, markdownFallback0);
+            const tf = (titleFallback || pageTitle.value || '').trim();
+            log('single:fallback-reader-markdown', { url: normalizedUrl, title: tf || '', markdownLength: (markdownFallback || '').length });
+            log('single:parsed-markdown-fallback', { url: normalizedUrl, title: tf || '', markdown: markdownFallback || '' });
+            pageTitle.value = tf;
+          } catch (fbErr) {
+            logError('single:fallback-reader-markdown-error', fbErr, { url: normalizedUrl });
+          }
+        }
         products.value = [];
       } else {
         const markdown0 = await fetchMarkdownWithReader(normalizedUrl, headers);

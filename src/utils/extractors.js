@@ -258,14 +258,19 @@ export function extractAmazonStructured(html, baseUrl) {
     if (sidebar.length >= 50) break;
   }
 
-  // 商品列表：优先有序列表 <ol id="zg-ordered-list"> 的 <li>
+  // 商品列表：优先有序列表 <ol id="zg-ordered-list"> 的 <li>，并覆盖新版网格卡片
   const items = [];
-  let cards = Array.from(doc.querySelectorAll('ol#zg-ordered-list > li, #zg-ordered-list li'));
+  let cards = Array.from(
+    doc.querySelectorAll(
+      'ol#zg-ordered-list > li, #zg-ordered-list li, .zg-grid-general-faceout, div[class*="grid-cell"], div[data-testid="grid-cell"]'
+    )
+  );
   if (cards.length === 0) {
-    // 回退：更广泛的 li，但仍以是否存在商品 anchor 为准
-    cards = Array.from(doc.querySelectorAll('li'));
+    // 回退：更广泛的容器，但仍以是否存在商品 anchor 为准
+    cards = Array.from(doc.querySelectorAll('li, article, .a-section, .sg-col, .zg-grid-general-faceout, div'));
   }
   let rank = 1;
+  const seenProduct = new Set(); // 去重：按 URL 或名称
   for (const c of cards) {
     const a = c.querySelector('a[href*="/dp/"], a[href*="/gp/product/"]');
     if (!a) continue;
@@ -279,6 +284,9 @@ export function extractAmazonStructured(html, baseUrl) {
     if (!name) continue;
 
     const product_url = abs(a.getAttribute('href') || '');
+    const dedupKey = product_url || name;
+    if (dedupKey && seenProduct.has(dedupKey)) continue;
+    if (dedupKey) seenProduct.add(dedupKey);
 
     // 评论数：常见位置 a.a-size-small.a-link-normal 或 data-hook
     let review_count = null;
@@ -324,15 +332,60 @@ export function extractAmazonStructured(html, baseUrl) {
     items.push({ rank: rank++, product_name: name, review_count, product_url, rating_text, reviews_url, price_text });
   }
 
-  // 如果未提取到商品，则尝试锚点回退（不在商品列表内）
+  // 如果未提取到商品，则尝试锚点回退（扫描全局商品锚点）
   if (items.length === 0) {
-    // 回退：扫描全局 anchors，包括列表内，尽量拿到商品名称
     const anchors = Array.from(doc.querySelectorAll('a[href*="/dp/"], a[href*="/gp/product/"]'));
+    const seenHref = new Set();
     for (const a of anchors) {
-      let name = normalizeText((a.textContent || '').trim());
+      const href = a.getAttribute('href') || '';
+      if (!href || seenHref.has(href)) continue;
+      seenHref.add(href);
+      // 名称：优先标题 span，其次图片 alt，最后文本
+      const titleSpan = a.querySelector('span.a-size-base, span.a-size-medium, span.a-size-large');
+      let name = normalizeText((titleSpan?.textContent || a.textContent || '').trim());
+      if (!name || name.length < 2) {
+        const img = a.querySelector('img[alt]') || (a.closest('li, .zg-grid-general-faceout, .a-section, .sg-col, div')?.querySelector('img[alt]'));
+        name = normalizeText((img?.getAttribute('alt') || '').trim());
+      }
       if (!name || name.length < 2) continue;
-      const product_url = abs(a.getAttribute('href') || '');
-      items.push({ rank: rank++, product_name: name, review_count: null, product_url, rating_text: '', reviews_url: '', price_text: '' });
+      const product_url = abs(href);
+      const container = a.closest('li, .zg-grid-general-faceout, .a-section, .sg-col, div') || a.parentElement;
+      // 评论数
+      let review_count = null;
+      if (container) {
+        const reviewEl = container.querySelector('.a-size-small.a-link-normal, [data-hook="total-review-count"], span.a-size-small');
+        if (reviewEl) {
+          const txt = normalizeText((reviewEl.textContent || reviewEl.getAttribute('aria-label') || '').trim());
+          const m = txt.match(/\d[\d,\.\s]*/);
+          if (m) {
+            const n = Number(m[0].replace(/[,.\s]/g, ''));
+            if (!Number.isNaN(n)) review_count = n;
+          }
+        }
+      }
+      // 评分、评论链接、价格
+      let rating_text = '';
+      let reviews_url = '';
+      let price_text = '';
+      if (container) {
+        const ratingEl = container.querySelector('.a-icon-alt, [aria-label*="星"], [aria-label*="stars"]');
+        if (ratingEl) rating_text = normalizeText((ratingEl.getAttribute('aria-label') || ratingEl.textContent || '').trim());
+        const reviewsLinkEl = container.querySelector('a[href*="/product-reviews/"]');
+        if (reviewsLinkEl) reviews_url = abs(reviewsLinkEl.getAttribute('href') || '');
+        const priceEl = container.querySelector('.a-price');
+        if (priceEl) {
+          const sym = (priceEl.querySelector('.a-price-symbol')?.textContent || '').trim();
+          const whole = (priceEl.querySelector('.a-price-whole')?.textContent || '').trim();
+          const frac = (priceEl.querySelector('.a-price-fraction')?.textContent || '').trim();
+          price_text = normalizeText(`${sym}${whole}${frac ? '.' + frac : ''}`);
+        }
+        if (!price_text) {
+          const raw = normalizeText(container.textContent || '');
+          const m2 = raw.match(/(JP¥|￥|¥)\s*\d[\d,\.]*/);
+          if (m2) price_text = m2[0].replace(/\s+/g, ' ');
+        }
+      }
+      items.push({ rank: rank++, product_name: name, review_count, product_url, rating_text, reviews_url, price_text });
       if (items.length >= 50) break;
     }
   }
