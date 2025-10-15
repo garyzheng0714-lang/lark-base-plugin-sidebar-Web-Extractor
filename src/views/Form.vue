@@ -87,6 +87,9 @@
 
   // 输出语言选择：auto(按域名)、ja-JP、zh-CN、en-US
   const outputLangMode = ref('auto');
+  // 新增：标题字段与子榜单字段（可选，文本类型）
+  const titleFieldId = ref('');
+  const sublistFieldId = ref('');
 
   function resolveAcceptLanguage(url) {
     let host = '';
@@ -152,14 +155,14 @@
       const u = new URL(input);
       const host = (u.hostname || '').toLowerCase();
       if (!host.includes('amazon.')) return input;
-      // 域优先语言：移除 Amazon 翻译路径前缀 /-/zh|en|ja/，并去除查询、哈希与 /ref= 追踪段
+      // 清洗 Amazon 的翻译路径前缀（/-/zh|en|ja/ 等），并去除查询、哈希与 /ref= 追踪段
       // 清空查询与哈希
       u.search = '';
       u.hash = '';
       // 路径中可能存在 "/ref=..." 作为追踪段，直接截断到其之前
       let p = u.pathname || '';
       const before = p;
-      // 更通用的语言前缀移除：/-/zh、/-/zh-CN、/-/en-US、/-/ja-JP 等
+      // 统一移除语言前缀：/-/zh、/-/zh-CN、/-/en-US、/-/ja-JP 等
       p = p.replace(/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i, '/');
       const refIdx = p.indexOf('/ref=');
       if (refIdx !== -1) {
@@ -489,6 +492,17 @@
       runError.value = t('msg.outputFieldTextOnly');
       return;
     }
+    // 若选择了标题/子榜单字段，需为文本类型
+    const titleMeta = (fieldList.value || []).find(f => f.id === titleFieldId.value);
+    if (titleMeta && titleMeta.type !== 1) {
+      runError.value = t('msg.titleFieldTextOnly');
+      return;
+    }
+    const sublistMeta = (fieldList.value || []).find(f => f.id === sublistFieldId.value);
+    if (sublistMeta && sublistMeta.type !== 1) {
+      runError.value = t('msg.sublistFieldTextOnly');
+      return;
+    }
     running.value = true;
     paused.value = false;
     abortCtrl = new AbortController();
@@ -507,7 +521,9 @@
         total: recordIds.length,
         urlFieldId: urlFieldId.value,
         outputFieldId: outputFieldId.value,
-        outputFieldType: outputMeta?.type
+        outputFieldType: outputMeta?.type,
+        titleFieldId: titleFieldId.value || null,
+        sublistFieldId: sublistFieldId.value || null
       });
       // url 字段由用户选择或自动识别
       progress.value.total = recordIds.length;
@@ -528,8 +544,10 @@
       let idx = 0;
       const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       const field = await table.getFieldById(outputFieldId.value);
+      const titleField = titleFieldId.value ? await table.getFieldById(titleFieldId.value) : null;
+      const sublistField = sublistFieldId.value ? await table.getFieldById(sublistFieldId.value) : null;
       // 结果缓存：同一规范化 URL 多次出现时复用结果，提升速度并降低触发限速
-      const contentCache = new Map(); // url -> { content, title, markdownLength }
+      const contentCache = new Map(); // url -> { content, title, sublistText, markdownLength }
       async function worker() {
         while (idx < recordIds.length) {
           if (paused.value || (abortCtrl && abortCtrl.signal?.aborted)) { log('worker:aborted:start'); break; }
@@ -543,9 +561,51 @@
             // 复用缓存结果
             if (contentCache.has(normalizedUrl)) {
               const cached = contentCache.get(normalizedUrl);
+              // 若为日本站且缓存看起来是英文内容，则进行一次日文路径回抓修正，并更新缓存与写入
+              try {
+                const hostC = (new URL(normalizedUrl)).hostname.toLowerCase();
+                const isAmazonC = /amazon\./i.test(hostC);
+                const cachedLooksEnglish = (/best sellers/i.test(cached.title || '') || /\/\-\/en\//i.test(cached.sublistText || ''));
+                if (isAmazonC && hostC.endsWith('.co.jp') && cachedLooksEnglish) {
+                  const urlJaC = forceAmazonLangPath(normalizedUrl, 'ja');
+                  const headersJaC = buildHeadersForUrl(urlJaC);
+                  const htmlJaC0 = await fetchHtmlWithReader(urlJaC, headersJaC, { signal: abortCtrl.signal });
+                  const { html: htmlJaC, structured: stJaC } = await refetchAmazonHtmlIfDoor(urlJaC, headersJaC, htmlJaC0, abortCtrl.signal);
+                  const titleJaC = (stJaC?.title || '').trim();
+                  const mdJaC = formatStructuredForAmazon(stJaC, urlJaC);
+                  const sidebarArrJaC = Array.isArray(stJaC?.sidebar) ? stJaC.sidebar : [];
+                  const sublistTextJaC = sidebarArrJaC
+                    .filter(s => (s && (s.name || '').trim()))
+                    .map(s => `[${(s.name || '').trim()}](${(s.url || '').trim()})`)
+                    .join('\n');
+                  const contentJaC = `Title: ${titleJaC || cached.title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${mdJaC || cached.content || ''}`;
+                  contentCache.set(normalizedUrl, { content: contentJaC, title: titleJaC || cached.title || '', sublistText: sublistTextJaC || cached.sublistText || '', markdownLength: (contentJaC || '').length });
+                  await field.setValue(rid, contentJaC);
+                  log('cache:ja-corrected-write-success', { recordId: rid, url: urlJaC, contentLength: (contentJaC || '').length });
+                  if (titleField) {
+                    try { await titleField.setValue(rid, titleJaC || cached.title || ''); log('cache:ja-corrected-write-title-success', { recordId: rid }); } catch (wte) { logError('cache:ja-corrected-write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
+                  }
+                  if (sublistField) {
+                    try { await sublistField.setValue(rid, sublistTextJaC || cached.sublistText || ''); log('cache:ja-corrected-write-sublist-success', { recordId: rid }); } catch (wse) { logError('cache:ja-corrected-write-sublist-error', wse, { recordId: rid, fieldId: sublistFieldId.value }); }
+                  }
+                  const baseMinC = hasAmazon ? 900 : 200;
+                  const baseSpanC = hasAmazon ? 500 : 250;
+                  await delay(baseMinC + Math.floor(Math.random() * baseSpanC));
+                  progress.value.done++;
+                  continue;
+                }
+              } catch (langFixErr) {
+                logError('cache:ja-corrected-error', langFixErr, { recordId: rid, url: normalizedUrl });
+              }
               try {
                 await field.setValue(rid, cached.content);
                 log('cache:hit-write-success', { recordId: rid, url: normalizedUrl, contentLength: cached.content.length });
+                if (titleField) {
+                  try { await titleField.setValue(rid, cached.title || ''); log('cache:hit-write-title-success', { recordId: rid }); } catch (wte) { logError('cache:hit-write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
+                }
+                if (sublistField) {
+                  try { await sublistField.setValue(rid, cached.sublistText || ''); log('cache:hit-write-sublist-success', { recordId: rid }); } catch (wse) { logError('cache:hit-write-sublist-error', wse, { recordId: rid, fieldId: sublistFieldId.value }); }
+                }
               } catch (writeErr) {
                 logError('cache:hit-write-error', writeErr, { recordId: rid, fieldId: outputFieldId.value });
               }
@@ -562,6 +622,7 @@
             // 根据域名选择提取路径：Amazon 走 HTML + 本地解析，其他走 Reader Markdown
             let content = '';
             let title = '';
+            let sublistText = '';
             if (/amazon\./i.test((new URL(normalizedUrl)).hostname)) {
               const html0 = await fetchHtmlWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
               const { html, structured } = await refetchAmazonHtmlIfDoor(normalizedUrl, headers, html0, abortCtrl.signal);
@@ -586,25 +647,34 @@
                   const urlJa = forceAmazonLangPath(normalizedUrl, 'ja');
                   const headersJa = buildHeadersForUrl(urlJa);
                   const htmlJa0 = await fetchHtmlWithReader(urlJa, headersJa, { signal: abortCtrl.signal });
-                  const { html: htmlJa, structured: stJa } = await refetchAmazonHtmlIfDoor(urlJa, headersJa, htmlJa0, abortCtrl.signal);
-                  const titleJa = (stJa?.title || '').trim();
-                  const mdJa = formatStructuredForAmazon(stJa, urlJa);
+                  const { html: htmlJa, structured: stJaTmp } = await refetchAmazonHtmlIfDoor(urlJa, headersJa, htmlJa0, abortCtrl.signal);
+                  const titleJa = (stJaTmp?.title || '').trim();
+                  const mdJa = formatStructuredForAmazon(stJaTmp, urlJa);
                   log('language:refetch-path-ja', {
                     recordId: rid,
                     url: urlJa,
                     titleBefore: title || '',
                     titleAfter: titleJa || '',
                     itemsBefore: Array.isArray(structured?.items) ? structured.items.length : 0,
-                    itemsAfter: Array.isArray(stJa?.items) ? stJa.items.length : 0
+                    itemsAfter: Array.isArray(stJaTmp?.items) ? stJaTmp.items.length : 0
                   });
                   title = titleJa || title;
                   mdFinal = mdJa || mdFinal;
                   log('record:parsed-markdown', { recordId: rid, url: urlJa, title: title || '', markdown: mdFinal || '' });
-                  // 覆盖 structured.items 以便统计
-                  if (Array.isArray(stJa?.items)) structured.items = stJa.items;
+                  // 覆盖 structured.items / structured.sidebar 以保证后续子榜单语言一致
+                  if (Array.isArray(stJaTmp?.items)) structured.items = stJaTmp.items;
+                  if (Array.isArray(stJaTmp?.sidebar)) structured.sidebar = stJaTmp.sidebar;
                 } catch (langErr) {
                   logError('language:refetch-path-ja-error', langErr, { recordId: rid, url: normalizedUrl });
                 }
+              }
+              // 侧边子榜单提取为单元格文本（多个用英文逗号分隔，格式：[名称](URL)）
+              const sidebarArr = Array.isArray(structured?.sidebar) ? structured.sidebar : [];
+              if (sidebarArr.length) {
+                sublistText = sidebarArr
+                  .filter(s => (s && (s.name || '').trim()))
+                  .map(s => `[${(s.name || '').trim()}](${(s.url || '').trim()})`)
+                  .join('\n');
               }
               // 若结构化解析失败或商品为空，使用 Reader Markdown 保底回退（域优先语言）
               let usedFallback = false;
@@ -639,6 +709,7 @@
               // 记录 Markdown 解析内容
               log('record:parsed-markdown', { recordId: rid, url: normalizedUrl, title: title || '', markdown: markdown || '' });
               content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${markdown || ''}`;
+              sublistText = '';
             }
             // 写入前记录预览内容
             log('record:write-preview', { recordId: rid, url: normalizedUrl, content, contentLength: (content || '').length });
@@ -646,9 +717,16 @@
               await field.setValue(rid, content);
               log('record:write-success', { recordId: rid, contentLength: content.length, content });
               // 写入成功后，缓存结果供后续同 URL 复用
-              contentCache.set(normalizedUrl, { content, title, markdownLength: content.length });
+              contentCache.set(normalizedUrl, { content, title, sublistText, markdownLength: content.length });
             } catch (writeErr) {
               logError('record:write-error', writeErr, { recordId: rid, fieldId: outputFieldId.value });
+            }
+            // 可选写入：标题与子榜单
+            if (titleField) {
+              try { await titleField.setValue(rid, title || ''); log('record:write-title-success', { recordId: rid }); } catch (wte) { logError('record:write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
+            }
+            if (sublistField) {
+              try { await sublistField.setValue(rid, sublistText || ''); log('record:write-sublist-success', { recordId: rid }); } catch (wse) { logError('record:write-sublist-error', wse, { recordId: rid, fieldId: sublistFieldId.value }); }
             }
             const baseMin = hasAmazon ? 900 : 200;
             const baseSpan = hasAmazon ? 500 : 250;
@@ -814,7 +892,9 @@
             pageTitle.value = titleJa || pageTitle.value || '';
             mdFinal = mdJa || mdFinal;
             log('single:parsed-markdown', { url: urlJa, title: pageTitle.value || '', markdown: mdFinal || '' });
+            // 覆盖 items / sidebar，确保子榜单语言与日文回抓一致
             if (Array.isArray(stJa?.items)) structured.items = stJa.items;
+            if (Array.isArray(stJa?.sidebar)) structured.sidebar = stJa.sidebar;
           } catch (langErr) {
             logError('single:refetch-path-ja-error', langErr, { url: normalizedUrl });
           }
@@ -878,6 +958,8 @@
           viewId: viewId.value,
           urlFieldId: urlFieldId.value,
           outputFieldId: outputFieldId.value,
+          titleFieldId: titleFieldId.value,
+          sublistFieldId: sublistFieldId.value,
           // 回退：移除语言首选项
         },
         logs: getLogs(),
@@ -944,6 +1026,35 @@
           :value="item.id"
         />
       </el-select>
+
+      <div class="text">{{ $t('label.titleField') }}</div>
+      <el-select
+        v-model="titleFieldId"
+        :placeholder="$t('placeholder.titleField')"
+        popper-class="selectStyle"
+      >
+        <el-option
+          v-for="item in fieldList"
+          :key="item.id"
+          :label="item.name"
+          :value="item.id"
+        />
+      </el-select>
+
+      <div class="text">{{ $t('label.sublistField') }}</div>
+      <el-select
+        v-model="sublistFieldId"
+        :placeholder="$t('placeholder.sublistField')"
+        popper-class="selectStyle"
+      >
+        <el-option
+          v-for="item in fieldList"
+          :key="item.id"
+          :label="item.name"
+          :value="item.id"
+        />
+      </el-select>
+      <div class="hint small">{{ $t('hint.sublistComma') }}</div>
 
       <div class="text">输出语言</div>
       <el-select v-model="outputLangMode" :placeholder="'自动按域名'" popper-class="selectStyle">

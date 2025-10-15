@@ -11,7 +11,9 @@
     "field": "Select a field",
     "url": "Enter the page URL to extract",
     "outputField": "Select a text field as output",
-    "linkField": "Select link source (Text/Formula/URL)"
+    "linkField": "Select link source (Text/Formula/URL)",
+    "titleField": "Select a text field for title",
+    "sublistField": "Select a text field for sublists"
   },
   "btn": {
     "extract": "Extract Content",
@@ -26,7 +28,9 @@
     "pageTitle": "Page Title",
     "products": "Products",
     "linkField": "Link Field",
-    "outputField": "Output Field"
+    "outputField": "Output Field",
+    "titleField": "Title Field",
+    "sublistField": "Sublist Field"
   },
   "column": {
     "name": "Product Name",
@@ -39,11 +43,14 @@
     "noRecords": "No records to update in current view",
     "noUrlField": "Please select a link field",
     "runFailed": "Batch update failed. Please try again later",
-    "outputFieldTextOnly": "Output field must be Text type"
+    "outputFieldTextOnly": "Output field must be Text type",
+    "titleFieldTextOnly": "Title field must be Text type",
+    "sublistFieldTextOnly": "Sublist field must be Text type"
   },
   "hint": {
     "noProducts": "No product info found. Showing page title only.",
     "urlFieldAuto": "Link field is auto-detected. No manual selection needed.",
-    "noUrlField": "Ensure a text field in view contains http/https links"
+    "noUrlField": "Ensure a text field in view contains http/https links",
+    "sublistComma": "If multiple sublists, use new lines (one per [name](link))."
   }
 }
