@@ -104,7 +104,16 @@
     const isAmazon = /amazon\./i.test(host);
     // 亚马逊：只等待榜单列表，缩短超时；其他站点略等页面主体
     const waitSelector = isAmazon ? '#zg-ordered-list' : 'h1, article, main';
-    const headers = { 'x-wait-for-selector': waitSelector, 'x-timeout-ms': isAmazon ? '8000' : '10000', 'x-user-agent': isAmazon ? UA_POOL[0] : pickUA() };
+    const headers = {
+      'x-wait-for-selector': waitSelector,
+      'x-timeout-ms': isAmazon ? '8000' : '10000',
+      'x-user-agent': isAmazon ? UA_POOL[0] : pickUA(),
+      // 提升可信度：附加语言与来源
+      ...(isAmazon ? {
+        'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8',
+        'referer': 'https://www.amazon.co.jp/'
+      } : {})
+    };
     log('headers-built', { url, host, isAmazon, userAgent: headers['x-user-agent'] });
     return headers;
   }
@@ -114,14 +123,23 @@
       const u = new URL(input);
       const host = (u.hostname || '').toLowerCase();
       if (!host.includes('amazon.')) return input;
+      // 去除语言与 ref 等追踪参数，降低重定向与门页概率
       const parts = u.pathname.split('/');
       const hasLocalization = parts.length > 3 && parts[1] === '-' && parts[2];
-      // 去除语言与 ref 等追踪参数，降低重定向与门页概率
+      // 清空查询与哈希
       u.search = '';
+      u.hash = '';
       if (hasLocalization) {
         u.pathname = '/' + parts.slice(3).join('/');
       }
-      return u.toString();
+      // 路径中可能存在 "/ref=..." 作为追踪段，直接截断到其之前
+      const p = u.pathname || '';
+      const refIdx = p.indexOf('/ref=');
+      if (refIdx !== -1) {
+        u.pathname = p.slice(0, refIdx);
+      }
+      // 规范输出为 origin + pathname，避免意外带回查询参数
+      return `${u.origin}${u.pathname}`;
     } catch (_) {
       return input;
     }
@@ -140,14 +158,48 @@
     const altHeaders = { 'x-timeout-ms': '7000', 'x-user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:118.0) Gecko/20100101 Firefox/118.0' };
     try {
       const md2 = await fetchMarkdownWithReader(url, altHeaders);
-      // 若仍为门页，再做第三次回退：使用 Android Chrome UA，尝试移动页面分支
+      // 若仍为门页，再做第三次回退：使用 Android Chrome UA + 英文语言，尝试移动页面分支
       if (isAmazonDoorMarkdown(md2)) {
-        const altHeaders3 = { 'x-timeout-ms': '7000', 'x-user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Mobile Safari/537.36' };
+        const altHeaders3 = {
+          'x-timeout-ms': '7000',
+          'x-user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Mobile Safari/537.36',
+          'accept-language': 'en-US,en;q=0.9',
+          'referer': 'https://www.amazon.co.jp/'
+        };
         try {
           const md3 = await fetchMarkdownWithReader(url, altHeaders3);
-          const title3 = extractTitleFromMarkdown(md3);
-          log('record:door-refetch-3-success', { url, markdownLength: (md3 || '').length });
-          return { markdown: md3, title: title3, refetched: true };
+          if (isAmazonDoorMarkdown(md3)) {
+            // 仍为门页：尝试使用规范化后的 Canonical 链接做最终回退
+            const canonical = normalizeAmazonUrl(url);
+            if (canonical !== url) {
+              const altHeaders4 = {
+                'x-timeout-ms': '7000',
+                'x-user-agent': UA_POOL[0],
+                'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8',
+                'referer': 'https://www.amazon.co.jp/',
+                'x-wait-for-selector': '#zg-ordered-list'
+              };
+              try {
+                const md4 = await fetchMarkdownWithReader(canonical, altHeaders4);
+                if (!isAmazonDoorMarkdown(md4)) {
+                  const title4 = extractTitleFromMarkdown(md4);
+                  log('record:door-canonical-refetch-success', { url: canonical, markdownLength: (md4 || '').length });
+                  return { markdown: md4, title: title4, refetched: true };
+                }
+                log('record:door-canonical-still-door', { url: canonical, markdownLength: (md4 || '').length });
+              } catch (e4) {
+                logError('record:door-canonical-refetch-fail', e4, { url: canonical });
+              }
+            }
+            // 回退到 md3 的结果（虽然仍为门页，交由上层处理是否写入）
+            const title3 = extractTitleFromMarkdown(md3);
+            log('record:door-refetch-3-still-door', { url, markdownLength: (md3 || '').length });
+            return { markdown: md3, title: title3, refetched: true };
+          } else {
+            const title3 = extractTitleFromMarkdown(md3);
+            log('record:door-refetch-3-success', { url, markdownLength: (md3 || '').length });
+            return { markdown: md3, title: title3, refetched: true };
+          }
         } catch (e3) {
           logError('record:door-refetch-3-fail', e3, { url });
           const title2 = extractTitleFromMarkdown(md2);

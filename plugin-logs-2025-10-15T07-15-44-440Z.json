@@ -1,0 +1,713 @@
+{
+  "meta": {
+    "tableId": "tbltFtpyh94CK6xg",
+    "viewId": "vewAyyF8pg",
+    "urlFieldId": "fldFqposi1",
+    "outputFieldId": "fldeY0XTw2"
+  },
+  "logs": [
+    {
+      "ts": "2025-10-15T07:12:26.400Z",
+      "level": "info",
+      "event": "init",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:26.442Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:26.443Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:26.476Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:26.476Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:37.414Z",
+      "level": "info",
+      "event": "batch:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg",
+        "total": 15,
+        "urlFieldId": "fldFqposi1",
+        "outputFieldId": "fldeY0XTw2",
+        "outputFieldType": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:37.666Z",
+      "level": "info",
+      "event": "headers-built",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "host": "www.amazon.co.jp",
+        "isAmazon": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:12:37.666Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:08.895Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:08.896Z",
+      "level": "info",
+      "event": "record:door-detected",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:08.896Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:20.412Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:20.421Z",
+      "level": "info",
+      "event": "record:door-refetch-success",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "markdownLength": 48769
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:20.421Z",
+      "level": "info",
+      "event": "record:fetch-success",
+      "data": {
+        "recordId": "recuZAHs7BA6SZ",
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490377051/ref=zg_bs_nav_food-beverage_3_71498051",
+        "title": "Amazon.co.jp Best Sellers: The most popular items in Whole Coffee Beans",
+        "markdownLength": 48769
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:21.138Z",
+      "level": "info",
+      "event": "record:write-success",
+      "data": {
+        "recordId": "recuZAHs7BA6SZ",
+        "contentLength": 48985
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:23.782Z",
+      "level": "info",
+      "event": "headers-built",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "host": "www.amazon.co.jp",
+        "isAmazon": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:23.782Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:51.653Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:51.686Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:54.523Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:54.524Z",
+      "level": "info",
+      "event": "record:door-detected",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:54.524Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:56.174Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:56.174Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:58.234Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:58.235Z",
+      "level": "info",
+      "event": "record:door-refetch-3-success",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "markdownLength": 565
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:58.235Z",
+      "level": "info",
+      "event": "record:fetch-success",
+      "data": {
+        "recordId": "recuZF2sltoPTk",
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/10490383051/ref=zg_bs_nav_food-beverage_4_10490377051",
+        "title": "Warning: This page maybe requiring CAPTCHA, please make sure you are authorized to access this page.",
+        "markdownLength": 565
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:58.701Z",
+      "level": "info",
+      "event": "record:write-success",
+      "data": {
+        "recordId": "recuZF2sltoPTk",
+        "contentLength": 813
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:59.825Z",
+      "level": "info",
+      "event": "headers-built",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/26172899051/ref=zg_bs_nav_food-beverage_2_4489923051",
+        "host": "www.amazon.co.jp",
+        "isAmazon": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:13:59.825Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/26172899051/ref=zg_bs_nav_food-beverage_2_4489923051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:07.224Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:07.257Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:08.219Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:08.257Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:11.241Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:11.276Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:12.047Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:12.083Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:12.640Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:12.674Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:13.038Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:13.080Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:34.418Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/26172899051/ref=zg_bs_nav_food-beverage_2_4489923051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:34.423Z",
+      "level": "info",
+      "event": "record:fetch-success",
+      "data": {
+        "recordId": "recuZAHs7BINKl",
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/26172899051/ref=zg_bs_nav_food-beverage_2_4489923051",
+        "title": "Amazon.co.jp Best Sellers: The most popular items in Gelato",
+        "markdownLength": 48766
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:35.136Z",
+      "level": "info",
+      "event": "record:write-success",
+      "data": {
+        "recordId": "recuZAHs7BINKl",
+        "contentLength": 48972
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:36.099Z",
+      "level": "info",
+      "event": "headers-built",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "host": "www.amazon.co.jp",
+        "isAmazon": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:36.099Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:36.576Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:36.615Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:36.811Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:14:36.846Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:06.667Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:06.667Z",
+      "level": "info",
+      "event": "record:door-detected",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:06.667Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:07.540Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:07.578Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:08.004Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:08.004Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:09.317Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:09.318Z",
+      "level": "info",
+      "event": "record:door-refetch-3-success",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "markdownLength": 565
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:09.318Z",
+      "level": "info",
+      "event": "record:fetch-success",
+      "data": {
+        "recordId": "recuZAHs7BXkcQ",
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/2422738051/ref=zg_bs_nav_food-beverage_1",
+        "title": "Warning: This page maybe requiring CAPTCHA, please make sure you are authorized to access this page.",
+        "markdownLength": 565
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:09.651Z",
+      "level": "info",
+      "event": "record:write-success",
+      "data": {
+        "recordId": "recuZAHs7BXkcQ",
+        "contentLength": 800
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:10.579Z",
+      "level": "info",
+      "event": "headers-built",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/71498051/ref=zg_bs_nav_food-beverage_2_2422738051",
+        "host": "www.amazon.co.jp",
+        "isAmazon": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:10.579Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/71498051/ref=zg_bs_nav_food-beverage_2_2422738051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:11.822Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/71498051/ref=zg_bs_nav_food-beverage_2_2422738051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:11.824Z",
+      "level": "info",
+      "event": "record:fetch-success",
+      "data": {
+        "recordId": "recuZAHs7BUegu",
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/71498051/ref=zg_bs_nav_food-beverage_2_2422738051",
+        "title": "Amazon.co.jp Best Sellers: The most popular items in Coffee",
+        "markdownLength": 49566
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:12.411Z",
+      "level": "info",
+      "event": "record:write-success",
+      "data": {
+        "recordId": "recuZAHs7BUegu",
+        "contentLength": 49769
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:13.679Z",
+      "level": "info",
+      "event": "headers-built",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/3948734051/ref=zg_bs_nav_food-beverage_1_71413051",
+        "host": "www.amazon.co.jp",
+        "isAmazon": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:13.679Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/3948734051/ref=zg_bs_nav_food-beverage_1_71413051",
+        "respondWith": "markdown"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:15.410Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:15.445Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:35.040Z",
+      "level": "info",
+      "event": "auto-detect-url-field:start",
+      "data": {
+        "tableId": "tbltFtpyh94CK6xg",
+        "viewId": "vewAyyF8pg"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:35.079Z",
+      "level": "info",
+      "event": "auto-detect-url-field:end",
+      "data": {
+        "detectedFieldId": "fldFqposi1"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:44.296Z",
+      "level": "info",
+      "event": "reader:success",
+      "data": {
+        "url": "https://r.jina.ai/https://www.amazon.co.jp/gp/bestsellers/food-beverage/3948734051/ref=zg_bs_nav_food-beverage_1_71413051",
+        "status": 200,
+        "attempt": 1
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:44.297Z",
+      "level": "info",
+      "event": "record:door-detected",
+      "data": {
+        "url": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/3948734051/ref=zg_bs_nav_food-beverage_1_71413051"
+      }
+    },
+    {
+      "ts": "2025-10-15T07:15:44.297Z",
+      "level": "info",
+      "event": "reader:request",
+      "data": {
+        "inputUrl": "https://www.amazon.co.jp/gp/bestsellers/food-beverage/3948734051/ref=zg_bs_nav_food-beverage_1_71413051",
+        "respondWith": "markdown"
+      }
+    }
+  ]
+}
