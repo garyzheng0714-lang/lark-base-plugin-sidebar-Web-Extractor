@@ -17,15 +17,8 @@ import zhCn from 'element-plus/dist/locale/zh-cn.mjs';
 import en from 'element-plus/dist/locale/en.mjs';
 
 const app = createApp(App);
-// 注入国际化函数$t
-bitable.bridge.getLanguage().then((lang) => {
-  i18n.global.locale = lang;
-  const _isZh = lang === 'zh' || lang === 'zh-HK' || lang === 'zh-TW';
-
-  app.use(ElementPlus, {
-    locale: _isZh ? zhCn : en,
-  });
-});
+// 默认使用中文本地化
+app.use(ElementPlus, { locale: zhCn });
 
 app.use(i18n);
 app.mount('#app');
