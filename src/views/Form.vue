@@ -114,6 +114,85 @@
     return map['en-US'];
   }
 
+  // 将语言选择转为查询参数与 Amazon 路径所需的代码
+  function resolveLocaleForUrl(url) {
+    let host = '';
+    try { host = new URL(url).hostname.toLowerCase(); } catch (_) {}
+    const mode = (outputLangMode.value || 'auto');
+    // 语言头与查询参数映射
+    const langHeaderMap = {
+      'ja-JP': 'ja-JP',
+      'zh-CN': 'zh-CN',
+      'en-US': 'en-US'
+    };
+    const localeParamMap = {
+      'ja-JP': 'ja_JP',
+      'zh-CN': 'zh_CN',
+      'en-US': 'en_US'
+    };
+    // 货币按域名估算（尽量保守，未知域名默认 USD）
+    const currencyByTld = (h) => {
+      if (h.endsWith('.co.jp')) return 'JPY';
+      if (h.endsWith('.cn')) return 'CNY';
+      if (h.endsWith('.de')) return 'EUR';
+      if (h.endsWith('.fr')) return 'EUR';
+      if (h.endsWith('.it')) return 'EUR';
+      if (h.endsWith('.es')) return 'EUR';
+      if (h.endsWith('.nl')) return 'EUR';
+      if (h.endsWith('.pl')) return 'PLN';
+      if (h.endsWith('.co.uk') || h.endsWith('.uk')) return 'GBP';
+      if (h.endsWith('.com.au') || h.endsWith('.au')) return 'AUD';
+      if (h.endsWith('.ca')) return 'CAD';
+      return 'USD';
+    };
+    let headerLang;
+    if (mode !== 'auto') {
+      headerLang = langHeaderMap[mode] || 'en-US';
+    } else {
+      if (host.endsWith('.co.jp')) headerLang = 'ja-JP';
+      else if (host.endsWith('.cn')) headerLang = 'zh-CN';
+      else headerLang = 'en-US';
+    }
+    const localeParam = localeParamMap[headerLang] || 'en_US';
+    const currency = currencyByTld(host);
+    // Amazon 路径语言代码（/-/ja|zh|en/）
+    const amazonPathLang = headerLang === 'ja-JP' ? 'ja' : (headerLang === 'zh-CN' ? 'zh' : 'en');
+    return { headerLang, localeParam, currency, amazonPathLang };
+  }
+
+  // 根据语言选择与域名，在 URL 上附加 language/currency，并为 Amazon 强制语言路径
+  function applyLanguageToUrl(input) {
+    try {
+      const u = new URL(input);
+      const host = (u.hostname || '').toLowerCase();
+      const { headerLang, localeParam, currency, amazonPathLang } = resolveLocaleForUrl(input);
+      // 查询参数：若站点支持 language/currency，将其加入以避免 Accept-Language 被忽略
+      const langQ = u.searchParams.get('language');
+      if (!langQ || (langQ && langQ.toLowerCase() !== localeParam.toLowerCase())) {
+        u.searchParams.set('language', localeParam);
+      }
+      const curQ = u.searchParams.get('currency');
+      if (!curQ || (curQ && curQ.toUpperCase() !== currency.toUpperCase())) {
+        u.searchParams.set('currency', currency);
+      }
+      // Amazon 日本站：优先使用路径前缀做明确的语言选择（其他国家站点通常不使用该前缀）
+      if (/amazon\.co\.jp$/i.test(host)) {
+        let p = u.pathname || '';
+        // 规范化已有语言前缀为目标语言
+        const desired = (headerLang === 'ja-JP') ? 'ja' : 'en';
+        if (/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i.test(p)) {
+          p = p.replace(/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i, `/-/${desired}/`);
+        } else {
+          p = `/-/${desired}${p.startsWith('/') ? '' : '/'}${p}`;
+        }
+        u.pathname = p;
+      }
+      return u.toString();
+    } catch (_) {
+      return input;
+    }
+  }
+
   // 简单 UA 随机池，降低被识别为脚本的概率
   const UA_POOL = [
     // Desktop Chrome (stable)
@@ -155,15 +234,25 @@
       const u = new URL(input);
       const host = (u.hostname || '').toLowerCase();
       if (!host.includes('amazon.')) return input;
-      // 清洗 Amazon 的翻译路径前缀（/-/zh|en|ja/ 等），并去除查询、哈希与 /ref= 追踪段
-      // 清空查询与哈希
-      u.search = '';
+      // 清洗 Amazon 的语言路径（/-/zh|en|ja/ 等），并去除追踪段；保留与语言相关的查询参数
+      // 先处理查询参数：仅保留 language/currency/hl/gl/locale/lang，移除其他噪音
+      try {
+        const keepKeys = new Set(['language', 'currency', 'hl', 'gl', 'locale', 'lang']);
+        const nextParams = new URLSearchParams();
+        u.searchParams.forEach((v, k) => {
+          if (keepKeys.has(k)) nextParams.set(k, v);
+        });
+        const nextSearch = nextParams.toString();
+        u.search = nextSearch ? `?${nextSearch}` : '';
+      } catch (_) {
+        u.search = '';
+      }
+      // 清空哈希
       u.hash = '';
       // 路径中可能存在 "/ref=..." 作为追踪段，直接截断到其之前
       let p = u.pathname || '';
       const before = p;
-      // 统一移除语言前缀：/-/zh、/-/zh-CN、/-/en-US、/-/ja-JP 等
-      p = p.replace(/^\/-\/[a-z]{2}(?:[-_][a-z]{2})?\//i, '/');
+      // 保留语言前缀（如 '/-/ja/'），以作为缓存键的语言区分；仅移除追踪段
       const refIdx = p.indexOf('/ref=');
       if (refIdx !== -1) {
         u.pathname = p.slice(0, refIdx);
@@ -171,10 +260,10 @@
         u.pathname = p;
       }
       if (before !== u.pathname) {
-        log('language:path-localization-removed', { host, pathBefore: before, pathAfter: u.pathname });
+        log('language:path-cleaned', { host, pathBefore: before, pathAfter: u.pathname });
       }
-      // 规范输出为 origin + pathname，避免意外带回查询参数
-      return `${u.origin}${u.pathname}`;
+      // 输出包含保留的查询参数
+      return `${u.origin}${u.pathname}${u.search || ''}`;
     } catch (_) {
       return input;
     }
@@ -229,7 +318,7 @@
         try {
           const h3 = await fetchHtmlWithReader(url, altHeaders3, { signal });
           if (isAmazonDoorHtml(h3)) {
-            const canonical = normalizeAmazonUrl(url);
+            const canonical = normalizeAmazonUrl(applyLanguageToUrl(url));
             if (canonical !== url) {
               const altHeaders4 = {
                 'x-timeout-ms': '7000',
@@ -307,7 +396,7 @@
           const md3 = await fetchMarkdownWithReader(url, altHeaders3, { signal });
           if (isAmazonDoorMarkdown(md3)) {
             // 仍为门页：尝试使用规范化后的 Canonical 链接做最终回退
-            const canonical = normalizeAmazonUrl(url);
+            const canonical = normalizeAmazonUrl(applyLanguageToUrl(url));
             if (canonical !== url) {
               const altHeaders4 = {
                 'x-timeout-ms': '7000',
@@ -557,7 +646,8 @@
             const val = await table.getCellValue(urlFieldId.value, rid);
             const url = extractFirstUrl(val);
             if (!url) { log('record:skip-no-url', { recordId: rid }); progress.value.done++; continue; }
-            const normalizedUrl = normalizeAmazonUrl(url);
+            const languageAwareUrl = applyLanguageToUrl(url);
+            const normalizedUrl = normalizeAmazonUrl(languageAwareUrl);
             // 复用缓存结果
             if (contentCache.has(normalizedUrl)) {
               const cached = contentCache.get(normalizedUrl);
@@ -855,7 +945,8 @@
     extracting.value = true;
     log('single:start', { url });
     try {
-      const normalizedUrl = normalizeAmazonUrl(url);
+      const languageAwareUrl = applyLanguageToUrl(url);
+      const normalizedUrl = normalizeAmazonUrl(languageAwareUrl);
       const headers = buildHeadersForUrl(normalizedUrl);
       if (/amazon\./i.test((new URL(normalizedUrl)).hostname)) {
         const html0 = await fetchHtmlWithReader(normalizedUrl, headers);
