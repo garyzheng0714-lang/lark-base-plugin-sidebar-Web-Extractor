@@ -42,9 +42,6 @@
       if (e === 'hier:overlay-first-child-general') return `首行写入父类到列 · 层级 ${d.level + 1}`;
       if (e === 'hier:record-added-for-first-child') return `新增标准行（首子项） · 目标层级 ${d.childLevel} · 子类「${d.child || ''}」`;
       if (e === 'hier:record-added') return `新增行 · 链路 ${Array.isArray(d.chain) ? d.chain.join(' > ') : ''}`;
-      if (e === 'hier:status-options-added') return `初始化提取状态选项 · 新增 ${d.count} 个`;
-      if (e === 'hier:status-init') return `初始化提取状态 · 种子 ${d.seeds}`;
-      if (e === 'hier:status-set') return `更新提取状态 · 记录 ${d.rid} · ${d.status}`;
       if (e === 'hier:end') return `完成 · 新增 ${d.created} 行 · 处理 ${d.seeds} 记录`;
       if (e.startsWith('hier:') && l.level === 'error') return `错误 · ${d.message || '未知错误'}`;
       return `${e}`;
@@ -576,84 +573,13 @@
   }
 
   async function ensureStatusField(table) {
-    // 新增：确保“提取状态”单选字段，含四个选项（灰/黄/绿/红）
+    // 需求变更：删除状态列，不再维护提取状态
     const metas = await table.getViewById(viewId.value).then(v => v.getFieldMetaList());
-    let hit = metas.find(m => m.name === '提取状态') || metas.find(m => m.name === '状态');
-    let fid = '';
+    const hit = metas.find(m => m.name === '状态');
     if (hit) {
-      // 统一字段名与类型
-      try { if (hit.name !== '提取状态') await table.setField(hit.id, { name: '提取状态' }); } catch (_) {}
-      try { if (hit.type !== FieldType.SingleSelect) await table.setField(hit.id, { type: FieldType.SingleSelect }); } catch (_) {}
-      fid = hit.id;
-    } else {
-      fid = await table.addField({ type: FieldType.SingleSelect, name: '提取状态' });
+      try { await table.deleteField(hit.id); log('hier:status-field-deleted', { fieldId: hit.id }); } catch (e) { logError('hier:status-field-delete-error', e, { fieldId: hit.id }); }
     }
-    const statusField = await table.getFieldById(fid);
-
-    // 选项颜色：从 UI 获取调色板，尽量匹配灰/黄/绿/红
-    let colorList = [];
-    try { colorList = await bitable.ui.getSelectOptionColorInfoList(); } catch (_) { colorList = []; }
-    const parseHex = (h) => {
-      const s = (h || '').replace('#', '');
-      if (s.length !== 6) return [0, 0, 0];
-      const r = parseInt(s.slice(0, 2), 16);
-      const g = parseInt(s.slice(2, 4), 16);
-      const b = parseInt(s.slice(4, 6), 16);
-      return [r, g, b];
-    };
-    const pickIdx = (pred) => {
-      let best = -1, score = -1;
-      for (let i = 0; i < colorList.length; i++) {
-        const [r, g, b] = parseHex(colorList[i]?.bgColor);
-        const s = pred(r, g, b);
-        if (s > score) { score = s; best = i; }
-      }
-      return best < 0 ? 0 : best;
-    };
-    const idxGray = pickIdx((r, g, b) => {
-      const mean = (r + g + b) / 3;
-      const varc = Math.abs(r - mean) + Math.abs(g - mean) + Math.abs(b - mean);
-      return (255 - Math.abs(mean - 160)) - varc; // 偏中性、偏灰
-    });
-    const idxYellow = pickIdx((r, g, b) => (r + g) - Math.abs(b - 60));
-    const idxGreen = pickIdx((r, g, b) => g - (r + b) / 2);
-    const idxRed = pickIdx((r, g, b) => r - (g + b) / 2);
-
-    // 确保四个选项存在，并设置颜色
-    const desired = [
-      { name: '未开始提取', color: idxGray },
-      { name: '提取中', color: idxYellow },
-      { name: '提取完成', color: idxGreen },
-      { name: '提取失败', color: idxRed },
-    ];
-    let opts = [];
-    try { opts = await statusField.getOptions(); } catch (_) { opts = []; }
-    const byName = Object.create(null);
-    for (const o of opts) byName[o.name] = o;
-    // 新增缺失选项
-    const toAdd = desired.filter(d => !byName[d.name]).map(d => ({ name: d.name, color: d.color }));
-    if (toAdd.length) {
-      try { await statusField.addOptions(toAdd); log('hier:status-options-added', { count: toAdd.length }); } catch (e) { logError('hier:status-options-add-error', e, { names: toAdd.map(x => x.name) }); }
-      try { opts = await statusField.getOptions(); } catch (_) {}
-    }
-    // 统一颜色（更新已有的）
-    try {
-      opts = await statusField.getOptions();
-      const currentByName = Object.create(null);
-      for (const o of opts) currentByName[o.name] = o;
-      for (const d of desired) {
-        const cur = currentByName[d.name];
-        if (cur && typeof d.color === 'number' && cur.color !== d.color) {
-          try { await statusField.setOption(cur.id, { color: d.color }); } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
-    // 返回字段与名称->ID映射
-    try { opts = await statusField.getOptions(); } catch (_) {}
-    const idMap = Object.create(null);
-    for (const o of opts) idMap[o.name] = o.id;
-    return { field: statusField, idMap };
+    return null;
   }
 
   async function runHierarchyExtraction() {
@@ -666,7 +592,7 @@
       const view = await table.getViewById(viewId.value);
       const recordIds = (await view.getVisibleRecordIdList?.()) || [];
       if (!recordIds.length) { runError.value = '当前视图没有可更新的记录'; return; }
-      const statusCtx = await ensureStatusField(table); // 确保“提取状态”
+      await ensureStatusField(table); // 删除“状态”列（如果存在）
       const seedMeta = (fieldList.value || []).find(m => m.id === seedFieldId.value);
       // 若种子字段名是旧名，尝试改名为“品类1”
       try {
@@ -691,15 +617,6 @@
       progress.value.total = seeds.length;
       log('hier:start', { seeds: seeds.length, maxDepth: maxDepth.value });
 
-      // 初始化所有种子为“未开始提取”
-      try {
-        if (statusCtx?.field && statusCtx?.idMap?.['未开始提取']) {
-          const optId = statusCtx.idMap['未开始提取'];
-          for (const s of seeds) { try { await statusCtx.field.setValue(s.seedRid, optId); } catch (_) {} }
-          log('hier:status-init', { seeds: seeds.length });
-        }
-      } catch (_) {}
-
       let created = 0;
       // 全局去重：在整个运行中，同一“品类1 + 子链接”的组合只写一次
       const globalChildKeySet = new Set();
@@ -707,16 +624,6 @@
       // 关键：逐个处理一级榜单；并且首子项重合写入父级最后一行
       for (const seed of seeds) {
         if (paused.value || (abortCtrl && abortCtrl.signal?.aborted)) { log('hier:aborted'); break; }
-        // 进入单个品类提取：置为“提取中”
-        try {
-          if (statusCtx?.field && statusCtx?.idMap?.['提取中']) {
-            await statusCtx.field.setValue(seed.seedRid, statusCtx.idMap['提取中']);
-            log('hier:status-set', { rid: seed.seedRid, status: '提取中' });
-          }
-        } catch (_) {}
-        // 记录本次种子处理过程中涉及到的记录，用于收尾状态同步
-        const affectedIdsForSeed = new Set();
-        affectedIdsForSeed.add(seed.seedRid);
         const visited = new Set();
         const lastRowByChainKey = new Map(); // key: seedRid|name1|name2|...
 
@@ -826,15 +733,6 @@
                 await targetField.setValue(targetRid, parentSeg);
                 log('hier:overlay-first-child-general', { targetRid, level: node.level, parent: cleanCategoryLabel(parentName) });
 
-                // 同步“提取中”状态到被覆盖的父记录
-                try {
-                  if (statusCtx?.field && statusCtx?.idMap?.['提取中']) {
-                    await statusCtx.field.setValue(targetRid, statusCtx.idMap['提取中']);
-                    affectedIdsForSeed.add(targetRid);
-                    log('hier:status-set', { rid: targetRid, status: '提取中' });
-                  }
-                } catch (_) {}
-
                 // 为后续递归与其余子项准备“标准行”：使其父记录为该新行
                 if (childLevel <= maxDepth.value) {
                   const fieldsPayload = {};
@@ -859,15 +757,6 @@
                   const thisKey = makeChainKey(node.seedRid || seed.seedRid, nextChain, childLevel);
                   lastRowByChainKey.set(thisKey, rid);
                   log('hier:record-added-for-first-child', { rid, childLevel, child: cleanCategoryLabel(childName) });
-
-                  // 新建的“标准行”标记为提取中
-                  try {
-                    if (statusCtx?.field && statusCtx?.idMap?.['提取中']) {
-                      await statusCtx.field.setValue(rid, statusCtx.idMap['提取中']);
-                      affectedIdsForSeed.add(rid);
-                      log('hier:status-set', { rid, status: '提取中' });
-                    }
-                  } catch (_) {}
                 } else {
                   recordIdForThisChain = targetRid;
                   const thisKey = makeChainKey(node.seedRid || seed.seedRid, nextChain, childLevel);
@@ -905,15 +794,6 @@
                 const thisKey = makeChainKey(node.seedRid || seed.seedRid, nextChain, childLevel);
                 lastRowByChainKey.set(thisKey, rid);
                 log('hier:record-added', { rid, chain: nextChain.filter(Boolean) });
-
-                // 新建的行标记为提取中
-                try {
-                  if (statusCtx?.field && statusCtx?.idMap?.['提取中']) {
-                    await statusCtx.field.setValue(rid, statusCtx.idMap['提取中']);
-                    affectedIdsForSeed.add(rid);
-                    log('hier:status-set', { rid, status: '提取中' });
-                  }
-                } catch (_) {}
               } catch (e) { logError('hier:record-add-error', e, { chain: nextChain.filter(Boolean) }); }
             }
 
@@ -933,25 +813,11 @@
 
         // 针对当前种子，使用局部队列深度优先处理，直到该一级榜单完成
         const queue = [{ ...seed }];
-        let hadErrorForSeed = false;
         while (queue.length) {
           if (paused.value || (abortCtrl && abortCtrl.signal?.aborted)) { log('hier:aborted'); break; }
           const node = queue.shift();
-          try { await processNode(node); } catch (e) { hadErrorForSeed = true; logError('hier:process-node-error', e, { url: node?.url, level: node?.level }); }
+          try { await processNode(node); } catch (e) { logError('hier:process-node-error', e, { url: node?.url, level: node?.level }); }
         }
-        // 收尾：根据是否有错误置为完成/失败（同步到本次种子涉及的全部记录）
-        try {
-          if (statusCtx?.field) {
-            const key = hadErrorForSeed ? '提取失败' : '提取完成';
-            const optId = statusCtx?.idMap?.[key];
-            if (optId) {
-              // 统一更新到受影响的记录集合
-              for (const rid of Array.from(affectedIdsForSeed)) {
-                try { await statusCtx.field.setValue(rid, optId); log('hier:status-set', { rid, status: key }); } catch (_) {}
-              }
-            }
-          }
-        } catch (_) {}
         progress.value.done++;
       }
 
