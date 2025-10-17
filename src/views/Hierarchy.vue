@@ -9,6 +9,9 @@
   const { t } = useI18n();
   const base = bitable.base;
 
+  // 组件激活状态（用于切换到该模块时触发首列自动选择）
+  const props = defineProps({ active: { type: Boolean, default: false } });
+
   // 上下文与视图字段
   const databaseId = ref();
   const viewId = ref();
@@ -59,6 +62,7 @@
     viewId.value = selection.viewId;
     log('hier:init', { tableId: databaseId.value, viewId: viewId.value });
     await initFieldList();
+    autoSelectFirstField();
     startLogStreaming();
   });
   onUnmounted(() => { stopLogStreaming(); });
@@ -67,6 +71,12 @@
     databaseId.value = event.data.tableId;
     viewId.value = event.data.viewId;
     await initFieldList();
+    autoSelectFirstField();
+  });
+
+  // 切换到该模块时自动选择首列
+  watch(() => props.active, (val) => {
+    if (val) autoSelectFirstField();
   });
 
   // 日志下载
@@ -91,6 +101,17 @@
     const table = await base.getTable(databaseId.value);
     const view = await table.getViewById(viewId.value);
     fieldList.value = await view.getFieldMetaList();
+  }
+
+  function autoSelectFirstField() {
+    try {
+      if (seedFieldId.value) return; // 用户已选择则不覆盖
+      const first = (fieldList.value || [])[0];
+      if (first && first.id) {
+        seedFieldId.value = first.id;
+        log('hier:auto-select-seed-field', { fieldId: first.id, fieldName: first.name });
+      }
+    } catch (_) { /* 忽略 */ }
   }
 
   // 复用语言与 UA 逻辑（与 Form.vue 保持一致）
@@ -845,7 +866,7 @@
 <template>
   <div class="hier">
     <div class="section">
-      <div class="text">品类1链接字段</div>
+      <div class="text">品类1所在字段</div>
       <el-select v-model="seedFieldId" placeholder="请选择链接字段" popper-class="selectStyle">
       <el-option v-for="item in fieldList" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>

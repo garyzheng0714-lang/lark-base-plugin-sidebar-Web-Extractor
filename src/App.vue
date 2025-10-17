@@ -16,7 +16,7 @@
         <Form />
       </el-tab-pane>
       <el-tab-pane label="榜单层级提取" name="hierarchy">
-        <Hierarchy />
+        <Hierarchy :active="activeTab === 'hierarchy'" />
       </el-tab-pane>
     </el-tabs>
   </main>
