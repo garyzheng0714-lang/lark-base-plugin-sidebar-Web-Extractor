@@ -12,8 +12,8 @@
     "url": "抽出するページのURLを入力してください",
     "outputField": "出力用のテキストフィールドを選択してください",
     "linkField": "リンク元フィールドを選択（テキスト/式/URL）",
-    "titleField": "タイトルを書き込むテキストフィールドを選択",
-    "sublistField": "サブランキングを書き込むテキストフィールドを選択"
+    "titleField": "ランキング名を書き込むテキストフィールドを選択",
+    "productsField": "商品リストを書き込むテキストフィールドを選択"
   },
   "btn": {
     "extract": "本文を抽出",
@@ -29,8 +29,8 @@
     "products": "商品リスト",
     "linkField": "リンクフィールド",
     "outputField": "出力フィールド",
-    "titleField": "タイトルフィールド",
-    "sublistField": "サブランキングフィールド"
+    "titleField": "ランキング名フィールド",
+    "productsField": "商品リストフィールド"
   },
   "column": {
     "name": "商品名",
@@ -42,10 +42,12 @@
     "needOutputField": "先に出力フィールドを選択してください",
     "noRecords": "現在のビューに更新対象のレコードがありません",
     "noUrlField": "リンクフィールドを選択してください",
+    "needTitleField": "ランキング名フィールドを選択してください",
+    "needProductsField": "商品リストフィールドを選択してください",
     "outputFieldTextOnly": "出力フィールドはテキスト型である必要があります",
     "runFailed": "一括更新に失敗しました。後でもう一度お試しください",
-    "titleFieldTextOnly": "タイトルフィールドはテキスト型である必要があります",
-    "sublistFieldTextOnly": "サブランキングフィールドはテキスト型である必要があります"
+    "titleFieldTextOnly": "ランキング名フィールドはテキスト型である必要があります",
+    "productsFieldTextOnly": "商品リストフィールドはテキスト型である必要があります"
   },
   "hint": {
     "noProducts": "商品情報が見つかりませんでした。ページタイトルのみを表示します。",

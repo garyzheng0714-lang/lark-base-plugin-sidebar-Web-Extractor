@@ -867,9 +867,10 @@
   <div class="hier">
     <div class="section">
       <div class="text">品类1所在字段</div>
-      <el-select v-model="seedFieldId" placeholder="请选择链接字段" popper-class="selectStyle">
+      <el-select v-model="seedFieldId" placeholder="请选择字段" popper-class="selectStyle">
       <el-option v-for="item in fieldList" :key="item.id" :label="item.name" :value="item.id" />
       </el-select>
+      <div class="hint small">默认进入自动选择首列，可手动调整</div>
       <div class="text">最大提取层级</div>
       <el-input-number v-model="maxDepth" :min="1" :max="15" />
 
@@ -907,15 +908,15 @@
 </template>
 
 <style scoped>
-  .section { display: flex; flex-direction: column; gap: 12px; }
+  .section { display: flex; flex-direction: column; gap: var(--space-m); }
   .run-row { display: flex; gap: 8px; align-items: center; }
   .error { color: #e11d48; font-size: 13px; }
-  .runtime-panel { margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; }
-  .runtime-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; font-size: 13px; color: #374151; }
+  .runtime-panel { margin-top: 12px; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-muted); }
+  .runtime-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--border-color); font-size: 13px; color: #374151; }
   .runtime-actions { display: flex; gap: 8px; align-items: center; }
-  .runtime-body { max-height: 220px; overflow: auto; padding: 8px 10px; background: #ffffff; }
+  .runtime-body { max-height: 220px; overflow: auto; padding: 8px 10px; background: var(--el-bg-color, #ffffff); }
   .runtime-pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; margin: 0; }
-  .runtime-tip { padding: 6px 10px; font-size: 12px; color: #6b7280; border-top: 1px dashed #e5e7eb; }
+  .runtime-tip { padding: 6px 10px; font-size: 12px; color: var(--text-weak); border-top: 1px dashed var(--border-color); }
   .icon-download { display: inline-block; width: 16px; height: 16px; line-height: 16px; text-align: center; }
 </style>
 

@@ -12,8 +12,8 @@
     "url": "请输入要提取的页面链接",
     "outputField": "请选择一个文本字段作为输出",
     "linkField": "请选择链接来源字段（文本/公式/超链接）",
-    "titleField": "请选择用于写入标题的文本字段",
-    "sublistField": "请选择用于写入子榜单的文本字段"
+    "titleField": "请选择用于写入榜单名称的文本字段",
+    "productsField": "请选择用于写入商品列表的文本字段"
   },
   "btn": {
     "extract": "提取正文",
@@ -28,9 +28,9 @@
     "pageTitle": "页面标题",
     "products": "商品列表",
     "linkField": "链接字段",
-    "outputField": "输出字段",
-    "titleField": "标题字段",
-    "sublistField": "子榜单字段"
+    "outputField": "网页全文内容",
+    "titleField": "榜单名称",
+    "productsField": "商品列表"
   },
   "column": {
     "name": "商品名称",
@@ -42,10 +42,12 @@
     "needOutputField": "请先选择输出字段",
     "noRecords": "当前视图没有可更新的记录",
     "noUrlField": "请先选择链接字段",
+    "needTitleField": "请先选择榜单名称字段",
+    "needProductsField": "请先选择商品列表字段",
     "runFailed": "批量更新失败，请稍后重试",
     "outputFieldTextOnly": "输出字段需要为文本类型",
-    "titleFieldTextOnly": "标题字段需要为文本类型",
-    "sublistFieldTextOnly": "子榜单字段需要为文本类型"
+    "titleFieldTextOnly": "榜单名称字段需要为文本类型",
+    "productsFieldTextOnly": "商品列表字段需要为文本类型"
   },
   "hint": {
     "noProducts": "未提取到商品信息，已显示页面标题。",

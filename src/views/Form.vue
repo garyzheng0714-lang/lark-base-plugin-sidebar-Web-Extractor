@@ -44,6 +44,7 @@
     viewId.value = selection.viewId;
     log('init', { tableId: databaseId.value, viewId: viewId.value });
     await initFieldList();
+    await autoMatchFieldsByName();
     await autoDetectUrlField();
   });
 
@@ -60,6 +61,7 @@
   // 根据视图列表获取字段列表
   watch(viewId, async (newValue, oldValue) => {
     await initFieldList();
+    await autoMatchFieldsByName();
     await autoDetectUrlField();
   });
 
@@ -73,6 +75,7 @@
     databaseId.value = event.data.tableId;
     viewId.value = event.data.viewId;
     await initFieldList();
+    await autoMatchFieldsByName();
     await autoDetectUrlField();
   });
 
@@ -87,9 +90,10 @@
 
   // 输出语言选择：auto(按域名)、ja-JP、zh-CN、en-US
   const outputLangMode = ref('auto');
-  // 新增：标题字段与子榜单字段（可选，文本类型）
+  // 标题字段（可选，文本类型）
   const titleFieldId = ref('');
-  const sublistFieldId = ref('');
+  // 商品列表字段（可选，文本类型）
+  const productsFieldId = ref('');
 
   function resolveAcceptLanguage(url) {
     let host = '';
@@ -505,6 +509,45 @@
     lastFetchAtByHost.set(host, Date.now());
   }
 
+  async function autoMatchFieldsByName() {
+    if (running.value) return;
+    try {
+      const metas = fieldList.value || [];
+      const byName = (name, typeTextOnly=false) => {
+        const f = metas.find(m => (m?.name || '').trim() === (name || ''));
+        if (!f) return null;
+        if (typeTextOnly && f.type !== 1) return null;
+        return f;
+      };
+      const linkName = t('label.linkField');
+      const outputName = t('label.outputField');
+      const titleName = t('label.titleField');
+      const productsName = t('label.productsField');
+      if (!urlFieldId.value) {
+        const f = byName(linkName, false);
+        if (f) urlFieldId.value = f.id;
+      }
+      if (!outputFieldId.value) {
+        const f = byName(outputName, true);
+        if (f) outputFieldId.value = f.id;
+      }
+      if (!titleFieldId.value) {
+        const f = byName(titleName, true);
+        if (f) titleFieldId.value = f.id;
+      }
+      if (!productsFieldId.value) {
+        const f = byName(productsName, true);
+        if (f) productsFieldId.value = f.id;
+      }
+      log('auto-match-by-name', {
+        linkFieldId: urlFieldId.value || null,
+        outputFieldId: outputFieldId.value || null,
+        titleFieldId: titleFieldId.value || null,
+        productsFieldId: productsFieldId.value || null,
+      });
+    } catch (_) { /* 忽略 */ }
+  }
+
   async function autoDetectUrlField() {
     // 批量运行中跳过自动检测，避免写入触发视图事件导致重复开销
     if (running.value) return;
@@ -575,21 +618,30 @@
       runError.value = t('msg.noUrlField');
       return;
     }
+    // 必填：榜单名称与商品列表
+    if (!titleFieldId.value) {
+      runError.value = t('msg.needTitleField');
+      return;
+    }
+    if (!productsFieldId.value) {
+      runError.value = t('msg.needProductsField');
+      return;
+    }
     // 输出字段需为文本类型，避免写入失败
     const outputMeta = (fieldList.value || []).find(f => f.id === outputFieldId.value);
     if (outputMeta && outputMeta.type !== 1) {
       runError.value = t('msg.outputFieldTextOnly');
       return;
     }
-    // 若选择了标题/子榜单字段，需为文本类型
+    // 若选择了标题/商品列表字段，需为文本类型
     const titleMeta = (fieldList.value || []).find(f => f.id === titleFieldId.value);
     if (titleMeta && titleMeta.type !== 1) {
       runError.value = t('msg.titleFieldTextOnly');
       return;
     }
-    const sublistMeta = (fieldList.value || []).find(f => f.id === sublistFieldId.value);
-    if (sublistMeta && sublistMeta.type !== 1) {
-      runError.value = t('msg.sublistFieldTextOnly');
+    const productsMeta = (fieldList.value || []).find(f => f.id === productsFieldId.value);
+    if (productsMeta && productsMeta.type !== 1) {
+      runError.value = t('msg.productsFieldTextOnly');
       return;
     }
     running.value = true;
@@ -612,7 +664,7 @@
         outputFieldId: outputFieldId.value,
         outputFieldType: outputMeta?.type,
         titleFieldId: titleFieldId.value || null,
-        sublistFieldId: sublistFieldId.value || null
+        productsFieldId: productsFieldId.value || null
       });
       // url 字段由用户选择或自动识别
       progress.value.total = recordIds.length;
@@ -634,9 +686,9 @@
       const delay = (ms) => new Promise((r) => setTimeout(r, ms));
       const field = await table.getFieldById(outputFieldId.value);
       const titleField = titleFieldId.value ? await table.getFieldById(titleFieldId.value) : null;
-      const sublistField = sublistFieldId.value ? await table.getFieldById(sublistFieldId.value) : null;
+      const productsField = productsFieldId.value ? await table.getFieldById(productsFieldId.value) : null;
       // 结果缓存：同一规范化 URL 多次出现时复用结果，提升速度并降低触发限速
-      const contentCache = new Map(); // url -> { content, title, sublistText, markdownLength }
+      const contentCache = new Map(); // url -> { content, title, productsText, markdownLength }
       async function worker() {
         while (idx < recordIds.length) {
           if (paused.value || (abortCtrl && abortCtrl.signal?.aborted)) { log('worker:aborted:start'); break; }
@@ -655,7 +707,7 @@
               try {
                 const hostC = (new URL(normalizedUrl)).hostname.toLowerCase();
                 const isAmazonC = /amazon\./i.test(hostC);
-                const cachedLooksEnglish = (/best sellers/i.test(cached.title || '') || /\/\-\/en\//i.test(cached.sublistText || ''));
+                const cachedLooksEnglish = (/best sellers/i.test(cached.title || '') || /\/\-\/en\//i.test(cached.content || ''));
                 if (isAmazonC && hostC.endsWith('.co.jp') && cachedLooksEnglish) {
                   const urlJaC = forceAmazonLangPath(normalizedUrl, 'ja');
                   const headersJaC = buildHeadersForUrl(urlJaC);
@@ -663,20 +715,41 @@
                   const { html: htmlJaC, structured: stJaC } = await refetchAmazonHtmlIfDoor(urlJaC, headersJaC, htmlJaC0, abortCtrl.signal);
                   const titleJaC = (stJaC?.title || '').trim();
                   const mdJaC = formatStructuredForAmazon(stJaC, urlJaC);
-                  const sidebarArrJaC = Array.isArray(stJaC?.sidebar) ? stJaC.sidebar : [];
-                  const sublistTextJaC = sidebarArrJaC
-                    .filter(s => (s && (s.name || '').trim()))
-                    .map(s => `[${(s.name || '').trim()}](${(s.url || '').trim()})`)
-                    .join('\n');
+                  // 生成商品列表文本（修正为日文路径的 items）
+                  let productsTextJaC = '';
+                  if (Array.isArray(stJaC?.items) && stJaC.items.length) {
+                    const S = { price: '価格', from: 'より' };
+                    const lines = [];
+                    for (const it of stJaC.items) {
+                      const idx = Number(it?.rank) || 0;
+                      const name = (it?.product_name || '').trim();
+                      const ratingText = (it?.rating_text || '').trim();
+                      const rc = it?.review_count;
+                      const priceText = (it?.price_text || '').trim();
+                      if (!name) continue;
+                      const parts = [];
+                      parts.push(`#${idx} ${name}`);
+                      if (ratingText || typeof rc === 'number') {
+                        const rcText = typeof rc === 'number' ? String(rc) : '';
+                        parts.push(`${ratingText}${rcText ? ` ${rcText}` : ''}`);
+                      }
+                      if (priceText) {
+                        parts.push(`${S.price} ${priceText} ${S.from}`);
+                      }
+                      lines.push(parts.join(' '));
+                    }
+                    productsTextJaC = lines.join('\n');
+                  }
                   const contentJaC = `Title: ${titleJaC || cached.title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${mdJaC || cached.content || ''}`;
-                  contentCache.set(normalizedUrl, { content: contentJaC, title: titleJaC || cached.title || '', sublistText: sublistTextJaC || cached.sublistText || '', markdownLength: (contentJaC || '').length });
+                  const rankingNameJaC = extractRankingName({ titleText: titleJaC || '', markdownText: mdJaC || '' }) || (cached.rankingName || cached.title || '');
+                  contentCache.set(normalizedUrl, { content: contentJaC, title: titleJaC || cached.title || '', rankingName: rankingNameJaC, productsText: productsTextJaC || cached.productsText || '', markdownLength: (contentJaC || '').length });
                   await field.setValue(rid, contentJaC);
                   log('cache:ja-corrected-write-success', { recordId: rid, url: urlJaC, contentLength: (contentJaC || '').length });
                   if (titleField) {
-                    try { await titleField.setValue(rid, titleJaC || cached.title || ''); log('cache:ja-corrected-write-title-success', { recordId: rid }); } catch (wte) { logError('cache:ja-corrected-write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
+                    try { await titleField.setValue(rid, rankingNameJaC || titleJaC || cached.title || ''); log('cache:ja-corrected-write-title-success', { recordId: rid }); } catch (wte) { logError('cache:ja-corrected-write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
                   }
-                  if (sublistField) {
-                    try { await sublistField.setValue(rid, sublistTextJaC || cached.sublistText || ''); log('cache:ja-corrected-write-sublist-success', { recordId: rid }); } catch (wse) { logError('cache:ja-corrected-write-sublist-error', wse, { recordId: rid, fieldId: sublistFieldId.value }); }
+                  if (productsField) {
+                    try { await productsField.setValue(rid, productsTextJaC || cached.productsText || '0'); log('cache:ja-corrected-write-products-success', { recordId: rid }); } catch (wpe) { logError('cache:ja-corrected-write-products-error', wpe, { recordId: rid, fieldId: productsFieldId.value }); }
                   }
                   const baseMinC = hasAmazon ? 900 : 200;
                   const baseSpanC = hasAmazon ? 500 : 250;
@@ -691,10 +764,10 @@
                 await field.setValue(rid, cached.content);
                 log('cache:hit-write-success', { recordId: rid, url: normalizedUrl, contentLength: cached.content.length });
                 if (titleField) {
-                  try { await titleField.setValue(rid, cached.title || ''); log('cache:hit-write-title-success', { recordId: rid }); } catch (wte) { logError('cache:hit-write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
+                  try { await titleField.setValue(rid, cached.rankingName || cached.title || ''); log('cache:hit-write-title-success', { recordId: rid }); } catch (wte) { logError('cache:hit-write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
                 }
-                if (sublistField) {
-                  try { await sublistField.setValue(rid, cached.sublistText || ''); log('cache:hit-write-sublist-success', { recordId: rid }); } catch (wse) { logError('cache:hit-write-sublist-error', wse, { recordId: rid, fieldId: sublistFieldId.value }); }
+                if (productsField) {
+                  try { await productsField.setValue(rid, cached.productsText || '0'); log('cache:hit-write-products-success', { recordId: rid }); } catch (wpe) { logError('cache:hit-write-products-error', wpe, { recordId: rid, fieldId: productsFieldId.value }); }
                 }
               } catch (writeErr) {
                 logError('cache:hit-write-error', writeErr, { recordId: rid, fieldId: outputFieldId.value });
@@ -712,7 +785,9 @@
             // 根据域名选择提取路径：Amazon 走 HTML + 本地解析，其他走 Reader Markdown
             let content = '';
             let title = '';
-            let sublistText = '';
+            let productsText = '';
+            let rankingName = '';
+            let markdownUsed = '';
             if (/amazon\./i.test((new URL(normalizedUrl)).hostname)) {
               const html0 = await fetchHtmlWithReader(normalizedUrl, headers, { signal: abortCtrl.signal });
               const { html, structured } = await refetchAmazonHtmlIfDoor(normalizedUrl, headers, html0, abortCtrl.signal);
@@ -751,6 +826,7 @@
                   title = titleJa || title;
                   mdFinal = mdJa || mdFinal;
                   log('record:parsed-markdown', { recordId: rid, url: urlJa, title: title || '', markdown: mdFinal || '' });
+                  markdownUsed = mdFinal || '';
                   // 覆盖 structured.items / structured.sidebar 以保证后续子榜单语言一致
                   if (Array.isArray(stJaTmp?.items)) structured.items = stJaTmp.items;
                   if (Array.isArray(stJaTmp?.sidebar)) structured.sidebar = stJaTmp.sidebar;
@@ -758,13 +834,35 @@
                   logError('language:refetch-path-ja-error', langErr, { recordId: rid, url: normalizedUrl });
                 }
               }
-              // 侧边子榜单提取为单元格文本（多个用英文逗号分隔，格式：[名称](URL)）
-              const sidebarArr = Array.isArray(structured?.sidebar) ? structured.sidebar : [];
-              if (sidebarArr.length) {
-                sublistText = sidebarArr
-                  .filter(s => (s && (s.name || '').trim()))
-                  .map(s => `[${(s.name || '').trim()}](${(s.url || '').trim()})`)
-                  .join('\n');
+              // 生成商品列表文本（从结构化 items）
+              if (Array.isArray(structured?.items) && structured.items.length) {
+                const langHeader = resolveAcceptLanguage(normalizedUrl);
+                const primaryLang = (langHeader.split(',')[0] || 'en-US').trim();
+                const S = {
+                  'ja-JP': { price: '価格', from: 'より' },
+                  'zh-CN': { price: '价格', from: '起' },
+                  'en-US': { price: 'Price', from: 'from' },
+                }[primaryLang] || { price: 'Price', from: 'from' };
+                const lines = [];
+                for (const it of structured.items) {
+                  const idx = Number(it?.rank) || 0;
+                  const name = (it?.product_name || '').trim();
+                  const ratingText = (it?.rating_text || '').trim();
+                  const rc = it?.review_count;
+                  const priceText = (it?.price_text || '').trim();
+                  if (!name) continue;
+                  const parts = [];
+                  parts.push(`#${idx} ${name}`);
+                  if (ratingText || typeof rc === 'number') {
+                    const rcText = typeof rc === 'number' ? String(rc) : '';
+                    parts.push(`${ratingText}${rcText ? ` ${rcText}` : ''}`);
+                  }
+                  if (priceText) {
+                    parts.push(`${S.price} ${priceText} ${S.from}`);
+                  }
+                  lines.push(parts.join(' '));
+                }
+                productsText = lines.join('\n');
               }
               // 若结构化解析失败或商品为空，使用 Reader Markdown 保底回退（域优先语言）
               let usedFallback = false;
@@ -776,6 +874,7 @@
                   log('record:parsed-markdown-fallback', { recordId: rid, url: normalizedUrl, title: titleFallback || title || '', markdown: markdownFallback || '' });
                   title = (titleFallback || title || '').trim();
                   const md2 = markdownFallback || mdFinal || '';
+                  markdownUsed = md2;
                   content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${md2 || ''}`;
                   usedFallback = true;
                 } catch (fbErr) {
@@ -783,6 +882,7 @@
                 }
               }
               if (!usedFallback) {
+                markdownUsed = mdFinal || '';
                 content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${mdFinal || ''}`;
               }
             } else {
@@ -799,24 +899,25 @@
               // 记录 Markdown 解析内容
               log('record:parsed-markdown', { recordId: rid, url: normalizedUrl, title: title || '', markdown: markdown || '' });
               content = `Title: ${title || ''}\n\nURL Source: ${normalizedUrl}\n\nMarkdown Content:\n${markdown || ''}`;
-              sublistText = '';
             }
+            // 计算榜单名称并缓存
+            rankingName = extractRankingName({ titleText: title || '', markdownText: markdownUsed || '' }) || title || '';
             // 写入前记录预览内容
             log('record:write-preview', { recordId: rid, url: normalizedUrl, content, contentLength: (content || '').length });
             try {
               await field.setValue(rid, content);
               log('record:write-success', { recordId: rid, contentLength: content.length, content });
               // 写入成功后，缓存结果供后续同 URL 复用
-              contentCache.set(normalizedUrl, { content, title, sublistText, markdownLength: content.length });
+              contentCache.set(normalizedUrl, { content, title, rankingName, productsText, markdownLength: content.length });
             } catch (writeErr) {
               logError('record:write-error', writeErr, { recordId: rid, fieldId: outputFieldId.value });
             }
-            // 可选写入：标题与子榜单
+            // 可选写入：标题与商品列表
             if (titleField) {
-              try { await titleField.setValue(rid, title || ''); log('record:write-title-success', { recordId: rid }); } catch (wte) { logError('record:write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
+              try { await titleField.setValue(rid, rankingName || title || ''); log('record:write-title-success', { recordId: rid }); } catch (wte) { logError('record:write-title-error', wte, { recordId: rid, fieldId: titleFieldId.value }); }
             }
-            if (sublistField) {
-              try { await sublistField.setValue(rid, sublistText || ''); log('record:write-sublist-success', { recordId: rid }); } catch (wse) { logError('record:write-sublist-error', wse, { recordId: rid, fieldId: sublistFieldId.value }); }
+            if (productsField) {
+              try { await productsField.setValue(rid, productsText || '0'); log('record:write-products-success', { recordId: rid }); } catch (wpe) { logError('record:write-products-error', wpe, { recordId: rid, fieldId: productsFieldId.value }); }
             }
             const baseMin = hasAmazon ? 900 : 200;
             const baseSpan = hasAmazon ? 500 : 250;
@@ -881,7 +982,7 @@
       // 尝试从标题中解析分类（中文/日文/英文常见形式）
       const zh = title.match(/销售排行榜[:：]\s*(.+?)\s*中最受欢迎的商品/);
       const ja = title.match(/売れ筋ランキング[:：]?\s*(.+)/);
-      const en = title.match(/Best Sellers in\s+(.+)/i);
+      const en = title.match(/Best Sellers in\s+(.+)/i) || title.match(/The most popular items in\s+(.+)/i);
       const m = zh || ja || en;
       return m ? (m[1] || '').trim() : '';
     })();
@@ -931,6 +1032,23 @@
       }
     }
     return lines.join('\n');
+  }
+
+  // 提取榜单名称（优先从 markdown 的 "Bestsellers in X" / "Best Sellers in X"，其次从 "The most popular items in X"）
+  function extractRankingName({ titleText = '', markdownText = '' }) {
+    const md = markdownText || '';
+    const tit = titleText || '';
+    const m1 = md.match(/^\s*Bestsellers in\s+(.+)$/mi) || md.match(/^\s*Best\s*Sellers\s*in\s+(.+)$/mi);
+    if (m1 && m1[1]) return `Bestsellers in ${m1[1].trim()}`;
+    const m2 = tit.match(/Best\s*Sellers\s*in\s+(.+)/i) || tit.match(/The\s+most\s+popular\s+items\s+in\s+(.+)/i);
+    if (m2 && m2[1]) {
+      const cat = m2[1].trim();
+      // 统一为 "Bestsellers in X" 形式
+      return `Bestsellers in ${cat}`;
+    }
+    const m3 = md.match(/The\s+most\s+popular\s+items\s+in\s+(.+)/i);
+    if (m3 && m3[1]) return `Bestsellers in ${m3[1].trim()}`;
+    return tit || '';
   }
 
   async function handleExtract() {
@@ -1050,7 +1168,7 @@
           urlFieldId: urlFieldId.value,
           outputFieldId: outputFieldId.value,
           titleFieldId: titleFieldId.value,
-          sublistFieldId: sublistFieldId.value,
+          productsFieldId: productsFieldId.value,
           // 回退：移除语言首选项
         },
         logs: getLogs(),
@@ -1132,10 +1250,10 @@
         />
       </el-select>
 
-      <div class="text">{{ $t('label.sublistField') }}</div>
+      <div class="text">{{ $t('label.productsField') }}</div>
       <el-select
-        v-model="sublistFieldId"
-        :placeholder="$t('placeholder.sublistField')"
+        v-model="productsFieldId"
+        :placeholder="$t('placeholder.productsField')"
         popper-class="selectStyle"
       >
         <el-option
@@ -1145,7 +1263,6 @@
           :value="item.id"
         />
       </el-select>
-      <div class="hint small">{{ $t('hint.sublistComma') }}</div>
 
       <div class="text">输出语言</div>
       <el-select v-model="outputLangMode" :placeholder="'自动按域名'" popper-class="selectStyle">
@@ -1221,14 +1338,14 @@
 
   .divider {
     height: 1px;
-    background: #e5e7eb;
+    background: var(--border-color);
     margin: 24px 0;
   }
 
   .section {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-m);
   }
 
   .run-row { display: flex; gap: 8px; align-items: center; }
@@ -1247,23 +1364,23 @@
   }
 
   .hint {
-    font-size: 13px;
-    color: #6b7280;
+    font-size: 12px;
+    color: var(--text-weak);
   }
   .hint.small { font-size: 12px; }
 
   .runtime-panel {
     margin-top: 12px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-color);
     border-radius: 6px;
-    background: #fafafa;
+    background: var(--bg-muted);
   }
   .runtime-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 8px 10px;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--border-color);
     font-size: 13px;
     color: #374151;
   }
@@ -1272,7 +1389,7 @@
     max-height: 220px;
     overflow: auto;
     padding: 8px 10px;
-    background: #ffffff;
+    background: var(--el-bg-color, #ffffff);
   }
   .runtime-pre {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;

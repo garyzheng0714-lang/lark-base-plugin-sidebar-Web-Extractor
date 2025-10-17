@@ -12,8 +12,8 @@
     "url": "Enter the page URL to extract",
     "outputField": "Select a text field as output",
     "linkField": "Select link source (Text/Formula/URL)",
-    "titleField": "Select a text field for title",
-    "sublistField": "Select a text field for sublists"
+    "titleField": "Select a text field for ranking name",
+    "productsField": "Select a text field for products list"
   },
   "btn": {
     "extract": "Extract Content",
@@ -29,8 +29,8 @@
     "products": "Products",
     "linkField": "Link Field",
     "outputField": "Output Field",
-    "titleField": "Title Field",
-    "sublistField": "Sublist Field"
+    "titleField": "Ranking Name Field",
+    "productsField": "Products Field"
   },
   "column": {
     "name": "Product Name",
@@ -42,10 +42,12 @@
     "needOutputField": "Please select an output field first",
     "noRecords": "No records to update in current view",
     "noUrlField": "Please select a link field",
+    "needTitleField": "Please select ranking name field",
+    "needProductsField": "Please select products field",
     "runFailed": "Batch update failed. Please try again later",
     "outputFieldTextOnly": "Output field must be Text type",
-    "titleFieldTextOnly": "Title field must be Text type",
-    "sublistFieldTextOnly": "Sublist field must be Text type"
+    "titleFieldTextOnly": "Ranking name field must be Text type",
+    "productsFieldTextOnly": "Products field must be Text type"
   },
   "hint": {
     "noProducts": "No product info found. Showing page title only.",
