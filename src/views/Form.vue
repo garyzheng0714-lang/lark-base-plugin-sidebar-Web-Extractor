@@ -1078,7 +1078,7 @@
       if (abortCtrl) {
         try { abortCtrl.abort(); } catch (_) {}
       }
-      running.value = false;
+      // 不中止运行状态，以便保持暂停按钮与进度显示
       log('batch:paused', { done: progress.value.done, total: progress.value.total });
     } catch (e) {
       logError('batch:pause-error', e);
@@ -1156,7 +1156,7 @@
       </el-select>
       
       <div class="run-row">
-        <el-button type="primary" :loading="running" @click="runBatchUpdate">
+        <el-button type="primary" :loading="running && !paused" @click="runBatchUpdate">
           {{ $t('btn.run') }}
         </el-button>
         <el-button type="warning" v-if="running" @click="pauseRun">暂停</el-button>

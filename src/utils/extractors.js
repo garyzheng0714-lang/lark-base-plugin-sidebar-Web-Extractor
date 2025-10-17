@@ -205,11 +205,11 @@ function normalizeText(t) {
 }
 
 /**
- * Amazon 畅销榜结构化提取：标题、侧边链接（稳定识别 zg_bs_nav_*）、商品列表（含 URL 与评论数）
+ * Amazon 畅销榜结构化提取：标题、当前分类、侧边链接（识别 zg_bs_nav_* 导航层级）、商品列表（含 URL 与评论数）
  * 目标：稳定筛掉页面顶部/底部的导航噪音，仅输出核心信息。
  * @param {string} html
  * @param {string} baseUrl
- * @returns {{title:string, sidebar:Array<{name:string,url:string}>, items:Array<{rank:number,product_name:string,review_count:number|null,product_url:string}>}}
+ * @returns {{title:string, active_category:string, active_category_id:string, sidebar:Array<{name:string,url:string,nav_level:number|null,nav_ancestor:string|null,category_id:string|null}>, items:Array<{rank:number,product_name:string,review_count:number|null,product_url:string}>}}
  */
 export function extractAmazonStructured(html, baseUrl) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -264,6 +264,21 @@ export function extractAmazonStructured(html, baseUrl) {
     title = isJP ? `${categoryName}${ofWord}${basePhrase}` : (isZH ? `${categoryName}${ofWord}${basePhrase}` : `${basePhrase} ${ofWord} ${categoryName}`);
   }
 
+  // 当前页面的品类唯一ID（node）：优先路径段中的数字，其次查询参数 ?node=
+  let activeCategoryId = '';
+  try {
+    const uBase = new URL(baseUrl);
+    const segs = (uBase.pathname || '').split('/').filter(Boolean);
+    for (let i = segs.length - 1; i >= 0; i--) {
+      const s = segs[i];
+      if (/^\d{4,}$/.test(s)) { activeCategoryId = s; break; }
+    }
+    if (!activeCategoryId) {
+      const nodeParam = uBase.searchParams.get('node');
+      if (nodeParam && /^\d{4,}$/.test(nodeParam)) activeCategoryId = nodeParam;
+    }
+  } catch (_) {}
+
   // 侧边链接：稳定通过 zg_bs_nav_* ref 参数识别，且不在商品列表内
   const sidebar = [];
   const seen = new Set();
@@ -276,11 +291,40 @@ export function extractAmazonStructured(html, baseUrl) {
   });
   for (const a of sideAnchors) {
     const name = normalizeText(a.textContent);
-    const url = abs(a.getAttribute('href'));
+    const hrefRaw = a.getAttribute('href') || '';
+    const url = abs(hrefRaw);
+    let nav_level = null;
+    let nav_ancestor = null;
+    const mNav = hrefRaw.match(/zg_bs_nav_[^_]+_(\d+)_(\d+)/i);
+    if (mNav) {
+      nav_level = parseInt(mNav[1], 10);
+      nav_ancestor = mNav[2] || null;
+    } else {
+      const mUnv = hrefRaw.match(/zg_bs_unv_[^_]+_(\d+)_(\d+)/i);
+      if (mUnv) {
+        nav_level = parseInt(mUnv[1], 10);
+        nav_ancestor = mUnv[2] || null;
+      }
+    }
+    // 提取该链接指向的品类唯一ID：优先路径段数字，其次 ?node= 参数，最后回退到 ref 中的 ancestor
+    let category_id = null;
+    try {
+      const uHref = new URL(url);
+      const segs = (uHref.pathname || '').split('/').filter(Boolean);
+      for (let i = segs.length - 1; i >= 0; i--) {
+        const s = segs[i];
+        if (/^\d{4,}$/.test(s)) { category_id = s; break; }
+      }
+      if (!category_id) {
+        const nodeParam = uHref.searchParams.get('node');
+        if (nodeParam && /^\d{4,}$/.test(nodeParam)) category_id = nodeParam;
+      }
+    } catch (_) {}
+    if (!category_id && nav_ancestor) category_id = nav_ancestor;
     const key = `${name}@@${url}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    sidebar.push({ name, url });
+    sidebar.push({ name, url, nav_level: Number.isFinite(nav_level) ? nav_level : null, nav_ancestor, category_id });
     if (sidebar.length >= 50) break;
   }
 
@@ -416,5 +460,5 @@ export function extractAmazonStructured(html, baseUrl) {
     }
   }
 
-  return { title, sidebar, items };
+  return { title, active_category: categoryName, active_category_id: activeCategoryId, sidebar, items };
 }
